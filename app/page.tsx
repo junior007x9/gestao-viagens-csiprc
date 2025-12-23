@@ -42,7 +42,8 @@ export default function DiariasDashboard() {
   }
 
   const diariasFiltradas = diarias.filter(d => {
-    const correspondeNome = d.nome.toLowerCase().includes(pesquisa.toLowerCase())
+    const nomeNormalizado = d.nome ? d.nome.toLowerCase() : ""
+    const correspondeNome = nomeNormalizado.includes(pesquisa.toLowerCase())
     const correspondeMetodo = filtroMetodo === 'TODOS' ? true : d.metodo_pagamento === filtroMetodo
     return correspondeNome && correspondeMetodo
   })
@@ -69,7 +70,7 @@ export default function DiariasDashboard() {
       nome: formData.get('nome') as string,
       data_viagem: formData.get('data') as string,
       local_viagem: formData.get('local') as string,
-      valor: parseFloat(formData.get('valor') as string),
+      valor: parseFloat(formData.get('valor') as string) || 0,
       metodo_pagamento: formData.get('metodo_pagamento') as string,
       observacoes: formData.get('observacoes') as string,
       pago: false
@@ -99,7 +100,7 @@ export default function DiariasDashboard() {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <form onSubmit={verificarSenha} className="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-sm text-center">
-          <h1 className="text-3xl font-black text-slate-800 mb-6 italic tracking-tighter text-center">CSIPRC</h1>
+          <h1 className="text-3xl font-black text-slate-800 mb-6 italic tracking-tighter">CSIPRC</h1>
           <input 
             type="password" 
             placeholder="Senha de Acesso" 
@@ -107,7 +108,7 @@ export default function DiariasDashboard() {
             value={senhaInput}
             onChange={(e) => setSenhaInput(e.target.value)}
           />
-          <button className="w-full bg-blue-600 text-white font-black p-4 rounded-2xl shadow-lg active:scale-95 transition-all">ENTRAR</button>
+          <button type="submit" className="w-full bg-blue-600 text-white font-black p-4 rounded-2xl shadow-lg active:scale-95 transition-all">ENTRAR</button>
         </form>
       </div>
     )
@@ -117,7 +118,7 @@ export default function DiariasDashboard() {
     <div className="min-h-screen bg-slate-50 p-3 md:p-8 text-slate-900 font-sans pb-24">
       <div className="max-w-md mx-auto">
         
-        {/* Header e Pesquisa */}
+        {/* Cabeçalho */}
         <header className="bg-white p-5 rounded-[2rem] shadow-sm border mb-4">
           <h1 className="text-xl font-black uppercase italic tracking-tighter text-center">Gestão CSIPRC</h1>
           
@@ -138,7 +139,7 @@ export default function DiariasDashboard() {
           </div>
         </header>
 
-        {/* Cadastro - AQUI FOI CORRIGIDO O FECHAMENTO DA DIV */}
+        {/* Cadastro */}
         <div className="bg-white p-5 rounded-[2rem] shadow-sm border mb-6">
           <h2 className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-widest">Novo Registro</h2>
           <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
@@ -189,7 +190,7 @@ export default function DiariasDashboard() {
                     className={`flex-1 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-600 text-white shadow-lg'}`}>
                     {item.pago ? 'PAGO ✓' : 'MARCAR PAGO'}
                   </button>
-                  <button onClick={() => excluirDiaria(item.id)} className="bg-slate-100 px-5 rounded-xl text-xs grayscale opacity-30 hover:opacity-100 transition-all">🗑️</button>
+                  <button onClick={() => excluirDiaria(item.id)} className="bg-slate-100 px-5 rounded-xl text-xs opacity-30 hover:opacity-100 transition-all">🗑️</button>
                 </div>
               </div>
             ))
