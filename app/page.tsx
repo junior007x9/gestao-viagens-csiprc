@@ -12,7 +12,7 @@ export default function DiariasDashboard() {
   const [pesquisa, setPesquisa] = useState('')
   const [filtroMetodo, setFiltroMetodo] = useState('TODOS')
   
-  const SENHA_MESTRA = "1234" 
+  const SENHA_MESTRA = "erasmo" 
 
   const fetchDiarias = useCallback(async () => {
     try {
