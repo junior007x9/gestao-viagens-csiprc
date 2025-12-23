@@ -6,10 +6,13 @@ export default function DiariasDashboard() {
   const [diarias, setDiarias] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
+  // --- SEGURANÇA E FILTROS ---
+  const [estaAutenticado, setEstaAutenticado] = useState(false)
+  const [senhaInput, setSenhaInput] = useState('')
+  const [pesquisa, setPesquisa] = useState('')
   const [filtroMetodo, setFiltroMetodo] = useState('TODOS')
-  const [expandido, setExpandido] = useState<string | null>(null)
-  const [editandoId, setEditandoId] = useState<string | null>(null)
-  const [dadosEditados, setDadosEditados] = useState<any>({})
+  
+  const SENHA_MESTRA = "1234" 
 
   const fetchDiarias = useCallback(async () => {
     try {
@@ -29,37 +32,33 @@ export default function DiariasDashboard() {
   }, [])
 
   useEffect(() => {
-    fetchDiarias()
-  }, [fetchDiarias])
+    if (estaAutenticado) fetchDiarias()
+  }, [estaAutenticado, fetchDiarias])
 
-  const diariasFiltradas = diarias.filter(d => 
-    filtroMetodo === 'TODOS' ? true : d.metodo_pagamento === filtroMetodo
-  )
-
-  const iniciarEdicao = (item: any) => {
-    setEditandoId(item.id)
-    setDadosEditados({ ...item })
+  const verificarSenha = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (senhaInput === SENHA_MESTRA) setEstaAutenticado(true)
+    else alert("Senha incorreta!")
   }
 
-  const salvarEdicao = async () => {
+  const diariasFiltradas = diarias.filter(d => {
+    const correspondeNome = d.nome.toLowerCase().includes(pesquisa.toLowerCase())
+    const correspondeMetodo = filtroMetodo === 'TODOS' ? true : d.metodo_pagamento === filtroMetodo
+    return correspondeNome && correspondeMetodo
+  })
+
+  async function alternarPagamento(id: string, statusAtual: boolean) {
+    const agora = new Date().toISOString()
     const { error } = await supabase
       .from('diarias')
-      .update({
-        nome: dadosEditados.nome,
-        data_viagem: dadosEditados.data_viagem,
-        local_viagem: dadosEditados.local_viagem,
-        valor: parseFloat(dadosEditados.valor),
-        metodo_pagamento: dadosEditados.metodo_pagamento,
-        observacoes: dadosEditados.observacoes
+      .update({ 
+        pago: !statusAtual,
+        data_pagamento: !statusAtual ? agora : null 
       })
-      .eq('id', editandoId)
-
-    if (error) {
-      alert("Erro ao atualizar!")
-    } else {
-      setEditandoId(null)
-      fetchDiarias()
-    }
+      .eq('id', id)
+    
+    if (error) alert("Erro ao atualizar")
+    else fetchDiarias()
   }
 
   async function cadastrarDiaria(e: React.FormEvent<HTMLFormElement>) {
@@ -80,179 +79,126 @@ export default function DiariasDashboard() {
     else { form.reset(); fetchDiarias() }
   }
 
-  // --- FUNÇÃO CORRIGIDA: REMOVE O SÍMBOLO  E FORMATA LIMPO ---
-  const enviarRelatorioWhats = (tipo: 'GERAL' | 'SEI' | 'SALARIO') => {
-    let lista = diarias
-    let titulo = "*GESTÃO DE VIAGENS CSIPRC*"
-
-    if (tipo === 'SEI') {
-      lista = diarias.filter(d => d.metodo_pagamento === 'SEI')
-      titulo = "*GESTÃO DE VIAGENS CSIPRC - RELATÓRIO SEI*"
-    } else if (tipo === 'SALARIO') {
-      lista = diarias.filter(d => d.metodo_pagamento === 'CONTA SALARIO')
-      titulo = "*GESTÃO DE VIAGENS CSIPRC - RELATÓRIO CONTA SALÁRIO*"
-    }
-
-    if (lista.length === 0) {
-      alert("Nenhum registro para este relatório.")
-      return
-    }
-
-    let texto = `${titulo}\n\n`
-    
-    lista.forEach(d => {
-      // Usamos apenas emojis padrão e texto sem caracteres especiais ocultos
-      const status = d.pago ? "PAGO ✅" : "PENDENTE ❌"
-      texto += `${status}\n`
-      texto += `👤 *Nome:* ${d.nome}\n`
-      texto += `📍 *Viagem:* ${d.local_viagem} / ${d.metodo_pagamento}\n`
-      texto += `💰 *Valor:* R$ ${Number(d.valor).toFixed(2).replace('.', ',')}\n`
-      if (d.observacoes) texto += `📝 *Obs:* ${d.observacoes}\n`
-      texto += `----------------------------\n`
-    })
-
-    // O uso de encodeURIComponent garante que o WhatsApp entenda a mensagem sem erros
-    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`
-    window.open(url, '_blank')
-  }
-
-  async function alternarPagamento(id: string, statusAtual: boolean) {
-    await supabase.from('diarias').update({ pago: !statusAtual }).eq('id', id)
-    fetchDiarias()
-  }
-
   async function excluirDiaria(id: string) {
-    if (!confirm("Excluir?")) return
-    await supabase.from('diarias').delete().eq('id', id)
+    if (!confirm("Excluir registro?")) return
+    const { error } = await supabase.from('diarias').delete().eq('id', id)
     fetchDiarias()
+  }
+
+  const enviarRelatorioWhats = () => {
+    let texto = `*GESTÃO DE VIAGENS CSIPRC*\n\n`
+    diariasFiltradas.forEach(d => {
+      const status = d.pago ? "PAGO ✅" : "PENDENTE ❌"
+      const dataPago = d.data_pagamento ? `\n🗓️ *Pago em:* ${new Date(d.data_pagamento).toLocaleString('pt-BR')}` : ''
+      texto += `${status}\n👤 *Nome:* ${d.nome}\n📍 *Viagem:* ${d.local_viagem}\n💰 *Valor:* R$ ${Number(d.valor).toFixed(2).replace('.', ',')}${dataPago}\n----------------------------\n`
+    })
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
+  }
+
+  if (!estaAutenticado) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <form onSubmit={verificarSenha} className="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-sm text-center">
+          <h1 className="text-3xl font-black text-slate-800 mb-6 italic tracking-tighter text-center">CSIPRC</h1>
+          <input 
+            type="password" 
+            placeholder="Senha de Acesso" 
+            className="w-full border-2 p-4 rounded-2xl mb-4 text-center outline-none focus:border-blue-500 transition-all text-slate-900"
+            value={senhaInput}
+            onChange={(e) => setSenhaInput(e.target.value)}
+          />
+          <button className="w-full bg-blue-600 text-white font-black p-4 rounded-2xl shadow-lg active:scale-95 transition-all">ENTRAR</button>
+        </form>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 text-slate-900 font-sans text-sm">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-50 p-3 md:p-8 text-slate-900 font-sans pb-24">
+      <div className="max-w-md mx-auto">
         
-        <header className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <h1 className="text-2xl font-black text-slate-800 uppercase italic">Gestão de Viagens CSIPRC</h1>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => enviarRelatorioWhats('SEI')} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-green-700 transition-all shadow-md">Relatório SEI</button>
-            <button onClick={() => enviarRelatorioWhats('SALARIO')} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-green-700 transition-all shadow-md">Relatório Salário</button>
-            <button onClick={() => enviarRelatorioWhats('GERAL')} className="bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-slate-900 transition-all shadow-md">Geral ✅/❌</button>
+        {/* Header e Pesquisa */}
+        <header className="bg-white p-5 rounded-[2rem] shadow-sm border mb-4">
+          <h1 className="text-xl font-black uppercase italic tracking-tighter text-center">Gestão CSIPRC</h1>
+          
+          <div className="mt-4 relative">
+            <input 
+              type="text" 
+              placeholder="🔍 Pesquisar por nome..." 
+              className="w-full bg-slate-100 border-none p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900"
+              value={pesquisa}
+              onChange={(e) => setPesquisa(e.target.value)}
+            />
+          </div>
+
+          <div className="flex justify-between gap-2 mt-4">
+            <button onClick={() => setFiltroMetodo('TODOS')} className={`flex-1 py-2 rounded-lg text-[9px] font-bold uppercase border ${filtroMetodo === 'TODOS' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400'}`}>Todos</button>
+            <button onClick={() => setFiltroMetodo('SEI')} className={`flex-1 py-2 rounded-lg text-[9px] font-bold uppercase border ${filtroMetodo === 'SEI' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400'}`}>SEI</button>
+            <button onClick={() => setFiltroMetodo('CONTA SALARIO')} className={`flex-1 py-2 rounded-lg text-[9px] font-bold uppercase border ${filtroMetodo === 'CONTA SALARIO' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400'}`}>Salário</button>
           </div>
         </header>
 
-        {/* Cadastro */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 mb-8">
-          <h2 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Novo Registro</h2>
-          <form onSubmit={cadastrarDiaria} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-            <input name="nome" placeholder="Nome" className="border p-3 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" required />
-            <input name="data" type="date" className="border p-3 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" required />
-            <input name="local" placeholder="Local" className="border p-3 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" required />
-            <input name="valor" type="number" step="0.01" placeholder="Valor R$" className="border p-3 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" required />
-            <select name="metodo_pagamento" className="border p-3 rounded-xl bg-slate-50 cursor-pointer" required>
+        {/* Cadastro - AQUI FOI CORRIGIDO O FECHAMENTO DA DIV */}
+        <div className="bg-white p-5 rounded-[2rem] shadow-sm border mb-6">
+          <h2 className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-widest">Novo Registro</h2>
+          <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
+            <input name="nome" placeholder="Nome do Funcionário" className="border p-3 rounded-xl bg-slate-50 text-sm text-slate-900" required />
+            <div className="grid grid-cols-2 gap-2">
+              <input name="data" type="date" className="border p-3 rounded-xl bg-slate-50 text-xs text-slate-900" required />
+              <input name="valor" type="number" step="0.01" placeholder="Valor R$" className="border p-3 rounded-xl bg-slate-50 text-sm text-slate-900" required />
+            </div>
+            <input name="local" placeholder="Local da Viagem" className="border p-3 rounded-xl bg-slate-50 text-sm text-slate-900" required />
+            <select name="metodo_pagamento" className="border p-3 rounded-xl bg-slate-50 text-sm text-slate-900">
               <option value="SEI">SEI</option>
               <option value="CONTA SALARIO">CONTA SALÁRIO</option>
             </select>
-            <input name="observacoes" placeholder="Anotação (Opcional)" className="border p-3 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" />
-            <button type="submit" className="bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase text-xs shadow-lg transition-all">Salvar</button>
+            <input name="observacoes" placeholder="Anotação (Opcional)" className="border p-3 rounded-xl bg-slate-50 text-sm text-slate-900" />
+            <button type="submit" className="bg-blue-600 text-white font-black py-3 rounded-xl uppercase text-[10px] shadow-md active:scale-95 transition-all">Salvar Diária</button>
           </form>
         </div>
 
-        {/* Filtros */}
-        <div className="flex flex-wrap items-center gap-3 mb-6 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
-          <span className="font-bold text-slate-500 text-[10px] uppercase tracking-widest ml-2">Visualizar:</span>
-          <button onClick={() => setFiltroMetodo('TODOS')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filtroMetodo === 'TODOS' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Todos</button>
-          <button onClick={() => setFiltroMetodo('SEI')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filtroMetodo === 'SEI' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>SEI</button>
-          <button onClick={() => setFiltroMetodo('CONTA SALARIO')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filtroMetodo === 'CONTA SALARIO' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Salário</button>
+        {/* Lista de Cards */}
+        <div className="space-y-4">
+          {diariasFiltradas.length === 0 ? (
+            <p className="text-center text-slate-400 text-xs italic py-10">Nenhum registro encontrado...</p>
+          ) : (
+            diariasFiltradas.map((item) => (
+              <div key={item.id} className={`bg-white p-4 rounded-[2rem] shadow-sm border-l-[10px] transition-all ${item.pago ? 'border-green-500' : 'border-red-500'}`}>
+                <div className="flex justify-between items-start">
+                  <div className="max-w-[70%]">
+                    <h3 className="font-black text-slate-800 uppercase text-xs truncate">{item.nome}</h3>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{item.data_viagem} • {item.metodo_pagamento}</p>
+                  </div>
+                  <p className="font-black text-blue-600 text-sm whitespace-nowrap">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-2xl my-3 text-[11px] text-slate-600 leading-tight">
+                  <span className="font-bold text-slate-400 uppercase text-[9px] block mb-1">Localização:</span>
+                  📍 {item.local_viagem}
+                  {item.data_pagamento && (
+                    <div className="mt-2 pt-2 border-t border-slate-200">
+                      <span className="text-[9px] font-black text-green-600 block uppercase">✅ Pago em:</span>
+                      <span className="text-[10px] font-medium text-green-700">{new Date(item.data_pagamento).toLocaleString('pt-BR')}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => alternarPagamento(item.id, item.pago)}
+                    className={`flex-1 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-600 text-white shadow-lg'}`}>
+                    {item.pago ? 'PAGO ✓' : 'MARCAR PAGO'}
+                  </button>
+                  <button onClick={() => excluirDiaria(item.id)} className="bg-slate-100 px-5 rounded-xl text-xs grayscale opacity-30 hover:opacity-100 transition-all">🗑️</button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
-        {/* Tabela */}
-        <div className="bg-white shadow-xl rounded-[2.5rem] overflow-hidden border">
-          <table className="w-full text-left">
-            <thead className="bg-slate-900 text-slate-400 text-[10px] uppercase font-bold tracking-widest">
-              <tr>
-                <th className="p-6">Pessoa</th>
-                <th className="p-6">Viagem / Método</th>
-                <th className="p-6">Valor</th>
-                <th className="p-6 text-center">Obs</th>
-                <th className="p-6 text-center">Status</th>
-                <th className="p-6 text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {diariasFiltradas.map((item) => (
-                <React.Fragment key={item.id}>
-                  <tr className={`hover:bg-slate-50 ${editandoId === item.id ? 'bg-yellow-50' : ''}`}>
-                    <td className="p-6">
-                      {editandoId === item.id ? (
-                        <input value={dadosEditados.nome} onChange={e => setDadosEditados({...dadosEditados, nome: e.target.value})} className="border p-1 rounded w-full" />
-                      ) : (
-                        <span className="font-bold">{item.nome}</span>
-                      )}
-                    </td>
-                    <td className="p-6">
-                      {editandoId === item.id ? (
-                        <div className="space-y-1">
-                          <input value={dadosEditados.local_viagem} onChange={e => setDadosEditados({...dadosEditados, local_viagem: e.target.value})} className="border p-1 rounded w-full text-xs" />
-                          <input type="date" value={dadosEditados.data_viagem} onChange={e => setDadosEditados({...dadosEditados, data_viagem: e.target.value})} className="border p-1 rounded w-full text-xs" />
-                          <select value={dadosEditados.metodo_pagamento} onChange={e => setDadosEditados({...dadosEditados, metodo_pagamento: e.target.value})} className="border p-1 rounded w-full text-xs">
-                             <option value="SEI">SEI</option>
-                             <option value="CONTA SALARIO">CONTA SALÁRIO</option>
-                          </select>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="font-bold text-slate-700">{item.local_viagem}</div>
-                          <div className="text-[10px] text-blue-600 font-bold uppercase">{item.metodo_pagamento} | {item.data_viagem}</div>
-                        </>
-                      )}
-                    </td>
-                    <td className="p-6">
-                      {editandoId === item.id ? (
-                        <input type="number" value={dadosEditados.valor} onChange={e => setDadosEditados({...dadosEditados, valor: e.target.value})} className="border p-1 rounded w-full" />
-                      ) : (
-                        <span className="font-black">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</span>
-                      )}
-                    </td>
-                    <td className="p-6 text-center">
-                       <button onClick={() => setExpandido(expandido === item.id ? null : item.id)} className="text-xs bg-slate-100 px-2 py-1 rounded">👁️</button>
-                    </td>
-                    <td className="p-6 text-center">
-                       <button onClick={() => alternarPagamento(item.id, item.pago)} className={`px-4 py-1.5 rounded-full text-[10px] font-bold border-2 transition-all ${item.pago ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                         {item.pago ? 'PAGO' : 'PENDENTE'}
-                       </button>
-                    </td>
-                    <td className="p-6 text-center">
-                      <div className="flex justify-center gap-2">
-                        {editandoId === item.id ? (
-                          <>
-                            <button onClick={salvarEdicao} className="text-green-600 font-bold">Salvar</button>
-                            <button onClick={() => setEditandoId(null)} className="text-slate-400">Sair</button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => iniciarEdicao(item)} className="text-blue-500 hover:text-blue-700">✏️</button>
-                            <button onClick={() => excluirDiaria(item.id)} className="text-slate-300 hover:text-red-500">🗑️</button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {expandido === item.id && (
-                    <tr className="bg-blue-50/30">
-                      <td colSpan={6} className="p-6 italic text-slate-600">
-                        {editandoId === item.id ? (
-                          <textarea value={dadosEditados.observacoes} onChange={e => setDadosEditados({...dadosEditados, observacoes: e.target.value})} className="w-full border p-2 rounded" rows={2} />
-                        ) : (
-                          item.observacoes || "Sem observações."
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-          {loading && <div className="p-20 text-center font-black text-slate-300 uppercase animate-pulse">Carregando...</div>}
+        {/* Botão Flutuante */}
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-slate-900/90 backdrop-blur p-2 rounded-2xl shadow-2xl border border-slate-700">
+             <button onClick={enviarRelatorioWhats} className="bg-green-500 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase">Relatório WhatsApp</button>
         </div>
       </div>
     </div>
