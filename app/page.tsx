@@ -6,7 +6,6 @@ export default function DiariasDashboard() {
   const [diarias, setDiarias] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
-  // --- SEGURANÇA E FILTROS ---
   const [estaAutenticado, setEstaAutenticado] = useState(false)
   const [senhaInput, setSenhaInput] = useState('')
   const [pesquisa, setPesquisa] = useState('')
@@ -43,9 +42,10 @@ export default function DiariasDashboard() {
 
   const diariasFiltradas = diarias.filter(d => {
     const nomeNormalizado = d.nome ? d.nome.toLowerCase() : ""
-    const correspondeNome = nomeNormalizado.includes(pesquisa.toLowerCase())
+    const adolescenteNormalizado = d.adolescente_nome ? d.adolescente_nome.toLowerCase() : ""
+    const correspondeBusca = nomeNormalizado.includes(pesquisa.toLowerCase()) || adolescenteNormalizado.includes(pesquisa.toLowerCase())
     const correspondeMetodo = filtroMetodo === 'TODOS' ? true : d.metodo_pagamento === filtroMetodo
-    return correspondeNome && correspondeMetodo
+    return correspondeBusca && correspondeMetodo
   })
 
   async function alternarPagamento(id: string, statusAtual: boolean) {
@@ -68,6 +68,7 @@ export default function DiariasDashboard() {
     const formData = new FormData(form)
     const novaDiaria = {
       nome: formData.get('nome') as string,
+      adolescente_nome: formData.get('adolescente_nome') as string, // Novo campo
       data_viagem: formData.get('data') as string,
       local_viagem: formData.get('local') as string,
       valor: parseFloat(formData.get('valor') as string) || 0,
@@ -82,7 +83,7 @@ export default function DiariasDashboard() {
 
   async function excluirDiaria(id: string) {
     if (!confirm("Excluir registro?")) return
-    const { error } = await supabase.from('diarias').delete().eq('id', id)
+    await supabase.from('diarias').delete().eq('id', id)
     fetchDiarias()
   }
 
@@ -90,8 +91,9 @@ export default function DiariasDashboard() {
     let texto = `*GESTÃO DE VIAGENS CSIPRC*\n\n`
     diariasFiltradas.forEach(d => {
       const status = d.pago ? "PAGO ✅" : "PENDENTE ❌"
-      const dataPago = d.data_pagamento ? `\n🗓️ *Pago em:* ${new Date(d.data_pagamento).toLocaleString('pt-BR')}` : ''
-      texto += `${status}\n👤 *Nome:* ${d.nome}\n📍 *Viagem:* ${d.local_viagem}\n💰 *Valor:* R$ ${Number(d.valor).toFixed(2).replace('.', ',')}${dataPago}\n----------------------------\n`
+      texto += `${status}\n👤 *Funcionário:* ${d.nome}\n👶 *Adolescente:* ${d.adolescente_nome || 'Não informado'}\n📍 *Viagem:* ${d.local_viagem}\n💰 *Valor:* R$ ${Number(d.valor).toFixed(2).replace('.', ',')}\n`
+      if (d.observacoes) texto += `📝 *Nota:* ${d.observacoes}\n`
+      texto += `----------------------------\n`
     })
     window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
   }
@@ -118,14 +120,14 @@ export default function DiariasDashboard() {
     <div className="min-h-screen bg-slate-50 p-3 md:p-8 text-slate-900 font-sans pb-24">
       <div className="max-w-md mx-auto">
         
-        {/* Cabeçalho */}
+        {/* Header e Pesquisa */}
         <header className="bg-white p-5 rounded-[2rem] shadow-sm border mb-4">
           <h1 className="text-xl font-black uppercase italic tracking-tighter text-center">Gestão CSIPRC</h1>
           
           <div className="mt-4 relative">
             <input 
               type="text" 
-              placeholder="🔍 Pesquisar por nome..." 
+              placeholder="🔍 Buscar nome ou adolescente..." 
               className="w-full bg-slate-100 border-none p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900"
               value={pesquisa}
               onChange={(e) => setPesquisa(e.target.value)}
@@ -144,6 +146,7 @@ export default function DiariasDashboard() {
           <h2 className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-widest">Novo Registro</h2>
           <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
             <input name="nome" placeholder="Nome do Funcionário" className="border p-3 rounded-xl bg-slate-50 text-sm text-slate-900" required />
+            <input name="adolescente_nome" placeholder="Nome do Adolescente" className="border p-3 rounded-xl bg-slate-50 text-sm text-slate-900" required />
             <div className="grid grid-cols-2 gap-2">
               <input name="data" type="date" className="border p-3 rounded-xl bg-slate-50 text-xs text-slate-900" required />
               <input name="valor" type="number" step="0.01" placeholder="Valor R$" className="border p-3 rounded-xl bg-slate-50 text-sm text-slate-900" required />
@@ -160,44 +163,47 @@ export default function DiariasDashboard() {
 
         {/* Lista de Cards */}
         <div className="space-y-4">
-          {diariasFiltradas.length === 0 ? (
-            <p className="text-center text-slate-400 text-xs italic py-10">Nenhum registro encontrado...</p>
-          ) : (
-            diariasFiltradas.map((item) => (
-              <div key={item.id} className={`bg-white p-4 rounded-[2rem] shadow-sm border-l-[10px] transition-all ${item.pago ? 'border-green-500' : 'border-red-500'}`}>
-                <div className="flex justify-between items-start">
-                  <div className="max-w-[70%]">
-                    <h3 className="font-black text-slate-800 uppercase text-xs truncate">{item.nome}</h3>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{item.data_viagem} • {item.metodo_pagamento}</p>
-                  </div>
-                  <p className="font-black text-blue-600 text-sm whitespace-nowrap">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
+          {diariasFiltradas.map((item) => (
+            <div key={item.id} className={`bg-white p-4 rounded-[2rem] shadow-sm border-l-[10px] transition-all ${item.pago ? 'border-green-500' : 'border-red-500'}`}>
+              <div className="flex justify-between items-start mb-2">
+                <div className="max-w-[70%]">
+                  <h3 className="font-black text-slate-800 uppercase text-xs truncate">{item.nome}</h3>
+                  <p className="text-[10px] font-bold text-blue-600 uppercase mt-0.5">👦 {item.adolescente_nome}</p>
                 </div>
-
-                <div className="bg-slate-50 p-3 rounded-2xl my-3 text-[11px] text-slate-600 leading-tight">
-                  <span className="font-bold text-slate-400 uppercase text-[9px] block mb-1">Localização:</span>
-                  📍 {item.local_viagem}
-                  {item.data_pagamento && (
-                    <div className="mt-2 pt-2 border-t border-slate-200">
-                      <span className="text-[9px] font-black text-green-600 block uppercase">✅ Pago em:</span>
-                      <span className="text-[10px] font-medium text-green-700">{new Date(item.data_pagamento).toLocaleString('pt-BR')}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => alternarPagamento(item.id, item.pago)}
-                    className={`flex-1 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-600 text-white shadow-lg'}`}>
-                    {item.pago ? 'PAGO ✓' : 'MARCAR PAGO'}
-                  </button>
-                  <button onClick={() => excluirDiaria(item.id)} className="bg-slate-100 px-5 rounded-xl text-xs opacity-30 hover:opacity-100 transition-all">🗑️</button>
-                </div>
+                <p className="font-black text-slate-900 text-sm">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
               </div>
-            ))
-          )}
+
+              <div className="bg-slate-50 p-3 rounded-2xl mb-3 text-[11px] text-slate-600">
+                <p className="font-bold text-slate-400 uppercase text-[8px] mb-1">Destino & Método</p>
+                <p className="mb-2">📍 {item.local_viagem} • {item.metodo_pagamento}</p>
+                
+                {item.observacoes && (
+                  <>
+                    <p className="font-bold text-slate-400 uppercase text-[8px] mb-1 border-t pt-2">Anotação</p>
+                    <p className="italic text-slate-500">"{item.observacoes}"</p>
+                  </>
+                )}
+
+                {item.data_pagamento && (
+                  <div className="mt-2 pt-2 border-t border-slate-200">
+                    <span className="text-[9px] font-black text-green-600 block uppercase">✅ Confirmado em:</span>
+                    <span className="text-[10px] font-medium text-green-700">{new Date(item.data_pagamento).toLocaleString('pt-BR')}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => alternarPagamento(item.id, item.pago)}
+                  className={`flex-1 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-600 text-white shadow-lg shadow-red-100'}`}>
+                  {item.pago ? 'PAGO ✓' : 'MARCAR PAGO'}
+                </button>
+                <button onClick={() => excluirDiaria(item.id)} className="bg-slate-100 px-5 rounded-xl text-xs opacity-20 hover:opacity-100 transition-all">🗑️</button>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Botão Flutuante */}
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-slate-900/90 backdrop-blur p-2 rounded-2xl shadow-2xl border border-slate-700">
              <button onClick={enviarRelatorioWhats} className="bg-green-500 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase">Relatório WhatsApp</button>
         </div>
