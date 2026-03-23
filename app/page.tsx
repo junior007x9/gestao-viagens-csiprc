@@ -92,6 +92,10 @@ export default function DiariasDashboard() {
   const [metodoSelecionado, setMetodoSelecionado] = useState('SEI')
   const [mostrarPortal, setMostrarPortal] = useState(false)
   
+  // --- FILTRO DE DATAS PARA RELATÓRIO ---
+  const [dataInicioRelatorio, setDataInicioRelatorio] = useState('')
+  const [dataFimRelatorio, setDataFimRelatorio] = useState('')
+
   // --- GERENCIAMENTO DE EQUIPE ---
   const [mostrarGerenciarEquipe, setMostrarGerenciarEquipe] = useState(false)
   const [novoServidor, setNovoServidor] = useState({ nome: '', cargo: '' })
@@ -123,13 +127,20 @@ export default function DiariasDashboard() {
   const [avisoInativo, setAvisoInativo] = useState(false); 
   const [segundosRestantes, setSegundosRestantes] = useState(60); 
 
-  // --- CÁLCULO DOS TOTAIS ---
-  const totalNovoSEI = diarias
-    .filter(d => d.metodo_pagamento === 'SEI' && !d.pago && !d.data_ultima_exportacao)
+  // --- CÁLCULO DOS TOTAIS DE NOVAS (Leva em consideração o Filtro de Data) ---
+  const diariasNaoGeradasNoPeriodo = diarias.filter(d => {
+    let valido = !d.pago && !d.data_ultima_exportacao;
+    if (dataInicioRelatorio) valido = valido && d.data_viagem >= dataInicioRelatorio;
+    if (dataFimRelatorio) valido = valido && d.data_viagem <= dataFimRelatorio;
+    return valido;
+  });
+
+  const totalNovoSEI = diariasNaoGeradasNoPeriodo
+    .filter(d => d.metodo_pagamento === 'SEI')
     .reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
 
-  const totalNovoSalario = diarias
-    .filter(d => d.metodo_pagamento === 'CONTA SALARIO' && !d.pago && !d.data_ultima_exportacao)
+  const totalNovoSalario = diariasNaoGeradasNoPeriodo
+    .filter(d => d.metodo_pagamento === 'CONTA SALARIO')
     .reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
 
   // --- AGRUPAMENTO DE TABELAS EXPORTADAS PENDENTES ---
@@ -309,7 +320,6 @@ export default function DiariasDashboard() {
     if (timerLogout.current) clearTimeout(timerLogout.current);
   }
 
-  // --- DATA BR ---
   const formatarDataBR = (dataStr: string) => {
     if (!dataStr) return "---";
     try {
@@ -319,14 +329,22 @@ export default function DiariasDashboard() {
     } catch { return dataStr; }
   };
 
-  // --- EXCEL (SÓ GERA AS NOVAS) ---
+  // --- EXCEL (Gera as NOVAS aplicando o Filtro de Data e Ordenando) ---
   const baixarRelatorioPendentes = async (metodo: string) => {
-    const listaPendentes = diarias.filter(d => !d.pago && d.metodo_pagamento === metodo && !d.data_ultima_exportacao);
+    let listaPendentes = diarias.filter(d => !d.pago && d.metodo_pagamento === metodo && !d.data_ultima_exportacao);
     
+    // Aplica o filtro de data selecionado
+    if (dataInicioRelatorio) listaPendentes = listaPendentes.filter(d => d.data_viagem >= dataInicioRelatorio);
+    if (dataFimRelatorio) listaPendentes = listaPendentes.filter(d => d.data_viagem <= dataFimRelatorio);
+
     if (listaPendentes.length === 0) {
-      alert(`Não há novas diárias para gerar relatório de ${metodo}! As pendências antigas já estão nas tabelas geradas.`);
+      alert(`Não há novas diárias para gerar relatório de ${metodo} no período selecionado!\nAs pendências antigas já estão nas tabelas geradas e blindadas contra duplicidade.`);
       return;
     }
+
+    // ORDENAÇÃO CRONOLÓGICA: Da mais antiga para a mais nova
+    listaPendentes.sort((a, b) => new Date(a.data_viagem).getTime() - new Date(b.data_viagem).getTime());
+
     try {
       const response = await fetch('/api/export-excel', {
         method: 'POST',
@@ -363,9 +381,33 @@ export default function DiariasDashboard() {
     }
   }
 
+  // --- REFAZER DOWNLOAD (BAIXAR TABELA ANTIGA ESPECÍFICA) ---
+  const baixarRelatorioAntigo = async (metodo: string, ids: string[], dataExportacao: string) => {
+    const lista = diarias.filter(d => ids.includes(d.id));
+    if (lista.length === 0) return;
+    
+    // ORDENAÇÃO CRONOLÓGICA: Da mais antiga para a mais nova
+    lista.sort((a, b) => new Date(a.data_viagem).getTime() - new Date(b.data_viagem).getTime());
+
+    try {
+      const response = await fetch('/api/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ todasDiarias: lista, metodoSelecionado: metodo })
+      });
+      const data = await response.json();
+      if (data.success && data.file) {
+        const link = document.createElement('a');
+        link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${data.file}`;
+        link.download = `REEMISSAO_TABELA_${metodo}_DIA_${new Date(dataExportacao).toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      } else { alert("Erro API: " + data.error); }
+    } catch (err) { console.error("Erro Excel Antigo:", err); }
+  }
+
   // --- FUNÇÃO PARA DESFAZER / EXCLUIR RELATÓRIO GERADO ---
   const excluirRelatorioGerado = async (ids: string[]) => {
-    if (confirm(`Tem certeza que deseja excluir esta tabela? \nAs ${ids.length} diárias voltarão para o topo na seção de "A Gerar" (Novas).`)) {
+    if (confirm(`Tem certeza que deseja excluir/desfazer esta tabela gerada? \nAs ${ids.length} diárias voltarão para a fila de "A Gerar" (Novas).`)) {
       try {
         await supabase.from('diarias')
           .update({ data_ultima_exportacao: null, comprovante_url: null })
@@ -726,13 +768,25 @@ export default function DiariasDashboard() {
                 <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 px-2 py-1 rounded">SAIR</button>
               </div>
             </div>
+            
             <div className="flex-1 max-w-xl">
-              <input type="text" placeholder="🔍 Buscar..." className="w-full bg-slate-100 border-none p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 font-medium" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)} />
+              <input type="text" placeholder="🔍 Buscar Servidor ou Destino..." className="w-full bg-slate-100 border-none p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 font-medium" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)} />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setMostrarPortal(true)} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase">🔍 Portal MA</button>
-              <button onClick={() => baixarRelatorioPendentes('SEI')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 GERAR SEI (NOVO)</button>
-              <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 GERAR SALÁRIO (NOVO)</button>
+
+            {/* SEÇÃO DE FILTROS E EXPORTAÇÃO (ATUALIZADA) */}
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[9px] font-black text-slate-400 uppercase ml-2">Período p/ Relatório:</span>
+                <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
+                <span className="text-[10px] font-bold text-slate-400">ATÉ</span>
+                <input type="date" value={dataFimRelatorio} onChange={(e) => setDataFimRelatorio(e.target.value)} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
+                <button onClick={() => { setDataInicioRelatorio(''); setDataFimRelatorio(''); }} className="text-[9px] text-slate-400 hover:text-red-500 mr-2" title="Limpar Período">✖</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => setMostrarPortal(true)} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase">🔍 Portal MA</button>
+                <button onClick={() => baixarRelatorioPendentes('SEI')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 GERAR SEI (NOVO)</button>
+                <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 GERAR SALÁRIO (NOVO)</button>
+              </div>
             </div>
           </div>
 
@@ -777,7 +831,7 @@ export default function DiariasDashboard() {
 
       <main className="max-w-7xl mx-auto p-4 lg:p-8">
         
-        {/* CARDS TOTAIS: AGORA SÓ SOMAM AS NÃO GERADAS */}
+        {/* CARDS TOTAIS: AGORA SÓ SOMAM AS NÃO GERADAS NO PERÍODO SELECIONADO */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="bg-white p-6 rounded-[2rem] shadow-sm border-l-[12px] border-blue-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
              <div>
@@ -795,7 +849,7 @@ export default function DiariasDashboard() {
           </div>
         </div>
 
-        {/* NOVA SESSÃO: TABELAS GERADAS QUE AGUARDAM PAGAMENTO */}
+        {/* SESSÃO: TABELAS GERADAS QUE AGUARDAM PAGAMENTO */}
         {tabelasPendentesArray.length > 0 && (
           <div className="mb-8 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
             <h2 className="text-xs font-black text-amber-600 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -812,7 +866,6 @@ export default function DiariasDashboard() {
                          <span className="text-[9px] font-black text-amber-800 uppercase bg-amber-100/80 px-2 py-1 rounded tracking-widest border border-amber-200">{tabela.metodo}</span>
                          <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-100">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
                        </div>
-                       {/* BOTÃO EXCLUIR RELATÓRIO (DESFAZER) */}
                        <button onClick={() => excluirRelatorioGerado(tabela.ids)} className="text-amber-300 hover:text-red-500 transition-colors text-lg" title="Desfazer/Excluir Tabela">
                          🗑️
                        </button>
@@ -824,6 +877,10 @@ export default function DiariasDashboard() {
                    </div>
                    
                    <div className="pl-3 mt-4 flex flex-col gap-2">
+                      <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="bg-white border-2 border-amber-200 hover:bg-amber-50 text-amber-700 text-center py-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
+                        📥 Refazer Download do Excel
+                      </button>
+
                       {tabela.comprovante_url ? (
                          <a href={tabela.comprovante_url} target="_blank" rel="noopener noreferrer" className="bg-slate-800 hover:bg-slate-900 text-white text-center py-2.5 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
                            📄 Ver Cópia Salva
@@ -850,73 +907,16 @@ export default function DiariasDashboard() {
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border sticky top-40">
               <h2 className="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest">Novo Registro</h2>
               <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
-                
-                {/* AUTOCOMPLETE NOME */}
-                <AutocompleteInput 
-                  name="nome"
-                  placeholder="Nome do Servidor (Digite para buscar)"
-                  value={formNome}
-                  onChange={(e: any) => {
-                     setFormNome(e.target.value)
-                     // Tenta preencher cargo automaticamente se encontrar o servidor exato
-                     const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase())
-                     if(serv && serv.cargo) setFormCargo(serv.cargo)
-                  }}
-                  sugestoes={sugestoesNomes}
-                  required
-                />
-
-                {/* AUTOCOMPLETE CARGO (Só aparece se for conta salario) */}
-                {metodoSelecionado === 'CONTA SALARIO' && (
-                  <AutocompleteInput 
-                    name="cargo"
-                    placeholder="Cargo"
-                    value={formCargo}
-                    onChange={(e: any) => setFormCargo(e.target.value)}
-                    sugestoes={sugestoesCargos}
-                  />
-                )}
-                
+                <AutocompleteInput name="nome" placeholder="Nome do Servidor (Digite para buscar)" value={formNome} onChange={(e: any) => { setFormNome(e.target.value); const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase()); if(serv && serv.cargo) setFormCargo(serv.cargo); }} sugestoes={sugestoesNomes} required />
+                {metodoSelecionado === 'CONTA SALARIO' && <AutocompleteInput name="cargo" placeholder="Cargo" value={formCargo} onChange={(e: any) => setFormCargo(e.target.value)} sugestoes={sugestoesCargos} />}
                 <input name="adolescente_nome" placeholder="Adolescente / Motivo" className="border p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
-                
-                <div className="grid grid-cols-2 gap-2">
-                  <input name="data" type="date" className="border p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-600" required />
-                  <input name="valor" type="number" step="0.01" placeholder="R$ Valor" className="border p-3 rounded-xl bg-slate-50 text-sm font-bold" required />
-                </div>
-                
+                <div className="grid grid-cols-2 gap-2"><input name="data" type="date" className="border p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-600" required /><input name="valor" type="number" step="0.01" placeholder="R$ Valor" className="border p-3 rounded-xl bg-slate-50 text-sm font-bold" required /></div>
                 {metodoSelecionado === 'CONTA SALARIO' && <input name="quantidade" type="number" placeholder="Qtd. Diárias" className="border-2 border-emerald-100 p-3 rounded-xl bg-emerald-50 text-sm font-medium text-emerald-800" />}
-                
-                {/* AUTOCOMPLETE LOCAL */}
-                <AutocompleteInput 
-                  name="local"
-                  placeholder="Destino / Cidade"
-                  value={formLocal}
-                  onChange={(e: any) => setFormLocal(e.target.value)}
-                  sugestoes={sugestoesLocais}
-                  required
-                />
-
-                <select value={metodoSelecionado} onChange={(e) => setMetodoSelecionado(e.target.value)} className="border p-3 rounded-xl bg-slate-100 text-sm font-bold outline-none cursor-pointer">
-                  <option value="SEI">SISTEMA SEI</option>
-                  <option value="CONTA SALARIO">CONTA SALÁRIO</option>
-                </select>
-                
+                <AutocompleteInput name="local" placeholder="Destino / Cidade" value={formLocal} onChange={(e: any) => setFormLocal(e.target.value)} sugestoes={sugestoesLocais} required />
+                <select value={metodoSelecionado} onChange={(e) => setMetodoSelecionado(e.target.value)} className="border p-3 rounded-xl bg-slate-100 text-sm font-bold outline-none cursor-pointer"><option value="SEI">SISTEMA SEI</option><option value="CONTA SALARIO">CONTA SALÁRIO</option></select>
                 {metodoSelecionado === 'SEI' && <input name="numero_processo" placeholder="Nº Processo SEI" className="border-2 border-blue-100 p-3 rounded-xl bg-blue-50 text-sm font-bold text-blue-800 uppercase" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} />}
                 <textarea name="observacoes" placeholder="Observações..." className="border p-3 rounded-xl bg-slate-50 text-sm resize-none" rows={2} />
-                
-                <div className="flex items-center gap-2 px-1 py-1">
-                  <input 
-                    type="checkbox" 
-                    id="manterDados" 
-                    checked={manterDados} 
-                    onChange={(e) => setManterDados(e.target.checked)} 
-                    className="w-4 h-4 cursor-pointer accent-slate-900"
-                  />
-                  <label htmlFor="manterDados" className="text-[10px] font-black text-slate-500 uppercase cursor-pointer select-none hover:text-slate-800 transition-colors">
-                    Manter dados para próxima pessoa
-                  </label>
-                </div>
-
+                <div className="flex items-center gap-2 px-1 py-1"><input type="checkbox" id="manterDados" checked={manterDados} onChange={(e) => setManterDados(e.target.checked)} className="w-4 h-4 cursor-pointer accent-slate-900" /><label htmlFor="manterDados" className="text-[10px] font-black text-slate-500 uppercase cursor-pointer select-none hover:text-slate-800 transition-colors">Manter dados para próxima pessoa</label></div>
                 <button className="bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-xs shadow-lg hover:bg-black transition-all active:scale-95">Salvar Diária</button>
               </form>
             </div>
@@ -925,10 +925,7 @@ export default function DiariasDashboard() {
           <section className="lg:col-span-8">
             <div className="grid grid-cols-1 gap-4">
               {diariasFiltradas.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-20 opacity-50">
-                  <div className="text-4xl mb-2">📭</div>
-                  <p className="font-bold text-slate-400">Nenhum registro encontrado.</p>
-                </div>
+                <div className="flex flex-col items-center justify-center p-20 opacity-50"><div className="text-4xl mb-2">📭</div><p className="font-bold text-slate-400">Nenhum registro encontrado.</p></div>
               ) : (
                 diariasFiltradas.map((item) => (
                   <div key={item.id} className={`bg-white p-6 rounded-[2rem] shadow-sm border-l-[12px] transition-all duration-300 ${item.pago ? 'border-green-500 bg-slate-50 opacity-80 hover:opacity-100' : 'border-red-500 shadow-md transform hover:-translate-y-1'}`}>
@@ -944,18 +941,13 @@ export default function DiariasDashboard() {
                         <input value={dadosEditados.cargo || ""} onChange={e => setDadosEditados({...dadosEditados, cargo: e.target.value.toUpperCase()})} className="border p-2 rounded-lg text-sm uppercase" placeholder="Cargo" />
                         <input value={dadosEditados.quantidade || ""} onChange={e => setDadosEditados({...dadosEditados, quantidade: e.target.value})} className="border p-2 rounded-lg text-sm" placeholder="Qtd" />
                         <textarea value={dadosEditados.observacoes || ""} onChange={e => setDadosEditados({...dadosEditados, observacoes: e.target.value})} className="col-span-2 border p-2 rounded-lg text-sm" placeholder="Observações" />
-                        <div className="col-span-2 flex gap-2 mt-2">
-                          <button onClick={salvarEdicao} className="flex-1 bg-green-600 text-white p-3 rounded-xl font-bold uppercase text-[10px]">Salvar Alterações</button>
-                          <button onClick={() => setIdEditando(null)} className="flex-1 bg-slate-200 text-slate-600 p-3 rounded-xl font-bold uppercase text-[10px]">Cancelar</button>
-                        </div>
+                        <div className="col-span-2 flex gap-2 mt-2"><button onClick={salvarEdicao} className="flex-1 bg-green-600 text-white p-3 rounded-xl font-bold uppercase text-[10px]">Salvar Alterações</button><button onClick={() => setIdEditando(null)} className="flex-1 bg-slate-200 text-slate-600 p-3 rounded-xl font-bold uppercase text-[10px]">Cancelar</button></div>
                       </div>
                     ) : (
                       <div className="flex flex-col md:flex-row justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-wider ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 animate-pulse'}`}>
-                              {item.pago ? '✓ PAGO' : '⚠ PENDENTE'}
-                            </span>
+                            <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-wider ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 animate-pulse'}`}>{item.pago ? '✓ PAGO' : '⚠ PENDENTE'}</span>
                             <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md">{formatarDataBR(item.data_viagem)}</span>
                             {item.data_ultima_exportacao && !item.pago && (
                               <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md uppercase">📥 Tabela Gerada</span>
@@ -973,24 +965,12 @@ export default function DiariasDashboard() {
                           <div className="text-right">
                              <p className="font-black text-slate-900 text-2xl">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
                              <div className="text-[9px] text-slate-400 mt-2 space-y-0.5">
-                               {item.created_at && (
-                                 <p className="flex items-center justify-end gap-1">
-                                   ➕ {new Date(item.created_at).toLocaleDateString('pt-BR')} 
-                                   <span className="bg-slate-100 text-slate-500 px-1 rounded font-bold">{item.usuario_alteracao ? `por ${item.usuario_alteracao}` : ''}</span>
-                                 </p>
-                               )}
-                               {item.updated_at && (
-                                 <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1">
-                                   ✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}
-                                   <span className="bg-amber-50 text-amber-600 px-1 rounded border border-amber-100">{item.usuario_alteracao ? `por ${item.usuario_alteracao}` : ''}</span>
-                                 </p>
-                               )}
+                               {item.created_at && <p className="flex items-center justify-end gap-1">➕ {new Date(item.created_at).toLocaleDateString('pt-BR')} <span className="bg-slate-100 text-slate-500 px-1 rounded font-bold">{item.usuario_alteracao ? `por ${item.usuario_alteracao}` : ''}</span></p>}
+                               {item.updated_at && <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1">✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}<span className="bg-amber-50 text-amber-600 px-1 rounded border border-amber-100">{item.usuario_alteracao ? `por ${item.usuario_alteracao}` : ''}</span></p>}
                              </div>
                           </div>
                           <div className="flex gap-2 mt-4 w-full md:w-auto">
-                            <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 md:flex-none px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>
-                              {item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}
-                            </button>
+                            <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 md:flex-none px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>{item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}</button>
                             <button onClick={() => iniciarEdicao(item)} className="bg-white border-2 border-slate-100 px-4 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors">✏️</button>
                             <button onClick={() => excluirDiaria(item.id)} className="bg-white border-2 border-slate-100 px-4 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">🗑️</button>
                           </div>
@@ -1008,19 +988,14 @@ export default function DiariasDashboard() {
       {mostrarPortal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-all">
           <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col">
-            <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md">
-              <h2 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">Portal da Transparência</h2>
-              <button onClick={() => setMostrarPortal(false)} className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 rounded-full text-xs font-bold transition-colors">FECHAR</button>
-            </div>
+            <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md"><h2 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">Portal da Transparência</h2><button onClick={() => setMostrarPortal(false)} className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 rounded-full text-xs font-bold transition-colors">FECHAR</button></div>
             <iframe src="https://www.transparencia.ma.gov.br/app/v2/pessoal" className="flex-1 w-full border-none bg-slate-50" title="Portal da Transparência" />
           </div>
         </div>
       )}
 
       <div className="fixed bottom-2 right-0 left-0 text-center pointer-events-none z-40">
-        <p className="text-[9px] font-bold text-slate-400 opacity-50 uppercase tracking-widest">
-          Sistema em desenvolvimento pelo <span className="text-slate-600">Educador Social Junior</span> • Versão Beta
-        </p>
+        <p className="text-[9px] font-bold text-slate-400 opacity-50 uppercase tracking-widest">Sistema em desenvolvimento pelo <span className="text-slate-600">Educador Social Junior</span> • Versão Beta</p>
       </div>
 
       <div className="fixed bottom-6 right-6 left-6 md:left-auto md:w-72 z-50">
@@ -1030,27 +1005,9 @@ export default function DiariasDashboard() {
       </div>
       
       <style jsx>{`
-        .input-login {
-          width: 100%;
-          background-color: #f1f5f9;
-          border: 2px solid #94a3b8;
-          padding: 1rem;
-          border-radius: 0.75rem;
-          text-align: center;
-          font-weight: 800;
-          outline: none;
-          color: #000000;
-          transition: all 0.2s;
-        }
-        .input-login::placeholder {
-          color: #334155;
-          opacity: 1;
-        }
-        .input-login:focus {
-          border-color: #2563eb;
-          background-color: #ffffff;
-          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        }
+        .input-login { width: 100%; background-color: #f1f5f9; border: 2px solid #94a3b8; padding: 1rem; border-radius: 0.75rem; text-align: center; font-weight: 800; outline: none; color: #000000; transition: all 0.2s; }
+        .input-login::placeholder { color: #334155; opacity: 1; }
+        .input-login:focus { border-color: #2563eb; background-color: #ffffff; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fadeIn { animation: fadeIn 0.3s ease-in-out; }
       `}</style>
