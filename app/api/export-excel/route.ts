@@ -20,16 +20,15 @@ export async function POST(req: Request) {
     const workbook = await XlsxPopulate.fromFileAsync(templatePath);
     const sheet = workbook.sheet(0);
 
-    // --- CORREÇÃO CRÍTICA: GARANTIR QUE TODAS AS LINHAS ESTEJAM VISÍVEIS ---
-    // Pega a altura da linha 10 como base (ou 25 se falhar)
+    // --- CORREÇÃO: Pegar altura padrão da linha para evitar linhas esmagadas ---
     const alturaBase = sheet.row(10).height() || 25;
 
     // 3. Prepara a Planilha: Limpa resíduos e FORÇA a exibição das linhas
-    // Aumentamos para 800 linhas para garantir que tabelas gigantes não quebrem
+    // Sem mesclagens para evitar a corrupção do arquivo XML do Excel
     for (let r = 10; r <= 800; r++) {
         const linha = sheet.row(r);
-        linha.hidden(false); // Remove o atributo de "linha oculta"
-        linha.height(alturaBase); // Força a altura para não ficar "esmagada"
+        linha.hidden(false); // Remove qualquer filtro ou linha oculta
+        linha.height(alturaBase); // Restaura a altura
         
         ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(c => {
             sheet.cell(`${c}${r}`).value(undefined).style("border", undefined).style("fill", undefined);
@@ -89,19 +88,24 @@ export async function POST(req: Request) {
     for (const dataExp of datasOrdenadas) {
         const pessoas = gruposPorData[dataExp];
 
-        // 6.1 Insere a faixa (banner) avisando a data
+        // 6.1 Insere a faixa (banner) avisando a data (SEM MESCLAR CÉLULAS)
         if (dataExp !== 'NOVAS') {
             const dataFormatada = dataExp.split('-').reverse().join('/');
-            sheet.row(row).hidden(false).height(30); // Garante que a linha do banner apareça
-            sheet.range(`A${row}:H${row}`).merged(true)
-                 .value(`TABELA GERADA DIA ${dataFormatada}`)
-                 .style({ bold: true, fill: 'FFF9C4', fontColor: '000000', horizontalAlignment: 'center', verticalAlignment: 'center', border: true });
+            sheet.row(row).hidden(false).height(30);
+            
+            // Pinta a linha inteira para dar o efeito visual de faixa
+            ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
+                sheet.cell(`${col}${row}`).style({ fill: 'FFF9C4', border: true });
+            });
+            // Escreve o aviso apenas na coluna B para não quebrar a tabela do Excel
+            sheet.cell(`B${row}`).value(`⚠️ TABELA GERADA DIA ${dataFormatada}`).style({ bold: true, fontColor: '000000', horizontalAlignment: 'left', verticalAlignment: 'center' });
             row++;
         } else if (datasOrdenadas.length > 1) {
-             sheet.row(row).hidden(false).height(30); // Garante que a linha do banner apareça
-             sheet.range(`A${row}:H${row}`).merged(true)
-                  .value(`🆕 NOVAS DIÁRIAS`)
-                  .style({ bold: true, fill: 'E8F5E9', fontColor: '000000', horizontalAlignment: 'center', verticalAlignment: 'center', border: true });
+             sheet.row(row).hidden(false).height(30);
+             ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
+                sheet.cell(`${col}${row}`).style({ fill: 'E8F5E9', border: true });
+             });
+             sheet.cell(`B${row}`).value(`🆕 NOVAS DIÁRIAS`).style({ bold: true, fontColor: '000000', horizontalAlignment: 'left', verticalAlignment: 'center' });
              row++;
         }
 
@@ -154,17 +158,24 @@ export async function POST(req: Request) {
                  row++;
              });
 
+             // 6.3 SUBTOTAL (Insere somente se a pessoa tiver mais de 1 viagem) SEM MESCLAR
              if (arrayViagens.length > 1) {
                  ultimaLinhaDados = row;
-                 sheet.row(row).hidden(false).height(alturaBase); // Força linha do subtotal
+                 sheet.row(row).hidden(false).height(alturaBase);
                  
+                 // Pinta a linha do subtotal de cinza
+                 ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
+                     sheet.cell(`${col}${row}`).style({ fill: 'F3F4F6', border: true });
+                 });
+
                  if (metodoSelecionado === 'SEI') {
-                     sheet.range(`A${row}:G${row}`).merged(true).value(`SUBTOTAL - ${nome}`).style({ bold: true, horizontalAlignment: 'right', fill: 'F3F4F6', border: true });
-                     sheet.cell(`H${row}`).value(arrayViagens.length).style({ bold: true, horizontalAlignment: 'center', fill: 'F3F4F6', border: true });
+                     sheet.cell(`G${row}`).value(`SUBTOTAL - ${nome}`).style({ bold: true, horizontalAlignment: 'right' });
+                     sheet.cell(`H${row}`).value(arrayViagens.length).style({ bold: true, horizontalAlignment: 'center' });
                  } else {
-                     sheet.range(`A${row}:F${row}`).merged(true).value(`SUBTOTAL - ${nome}`).style({ bold: true, horizontalAlignment: 'right', fill: 'F3F4F6', border: true });
-                     sheet.cell(`G${row}`).value(subtotalQtd).style({ bold: true, horizontalAlignment: 'center', fill: 'F3F4F6', border: true });
-                     sheet.cell(`H${row}`).value(subtotalValor).style({ bold: true, numberFormat: "R$ #,##0.00", fill: 'F3F4F6', border: true });
+                     // Escreve o nome e a palavra subtotal na Coluna F para ficar do lado dos valores
+                     sheet.cell(`F${row}`).value(`SUBTOTAL - ${nome}`).style({ bold: true, horizontalAlignment: 'right' });
+                     sheet.cell(`G${row}`).value(subtotalQtd).style({ bold: true, horizontalAlignment: 'center' });
+                     sheet.cell(`H${row}`).value(subtotalValor).style({ bold: true, numberFormat: "R$ #,##0.00" });
                  }
                  row++;
              }
@@ -175,7 +186,7 @@ export async function POST(req: Request) {
     if (ultimaLinhaDados < 10) ultimaLinhaDados = 10;
     const linhaTotal = ultimaLinhaDados + 2;
 
-    sheet.row(linhaTotal).hidden(false).height(alturaBase); // Força linha do total a aparecer
+    sheet.row(linhaTotal).hidden(false).height(alturaBase);
 
     if (metodoSelecionado === 'SEI') {
       sheet.cell(`G${linhaTotal}`).value("TOTAL GERAL:").style({ bold: true, horizontalAlignment: 'right' });
