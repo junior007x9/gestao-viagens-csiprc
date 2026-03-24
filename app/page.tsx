@@ -56,8 +56,13 @@ export default function DiariasDashboard() {
   // --- AUTENTICAÇÃO SEGURA ---
   const [estaAutenticado, setEstaAutenticado] = useState(false)
   const [usuarioLogado, setUsuarioLogado] = useState('') 
+  const [usuarioEmail, setUsuarioEmail] = useState('') 
   
-  // Estados do Formulário de Login (Simplificado)
+  // --- NÍVEL DE ACESSO (PERMISSÕES) ---
+  // E-mails que têm permissão de Administrador
+  const emailsAdmin = ['santos.junior12@hotmail.com', 'ederson@live.com']
+  const isAdmin = emailsAdmin.includes(usuarioEmail)
+
   const [emailInput, setEmailInput] = useState('')
   const [senhaInput, setSenhaInput] = useState('')
   const [msgAuth, setMsgAuth] = useState({ texto: '', tipo: '' })
@@ -125,6 +130,7 @@ export default function DiariasDashboard() {
       if (session) {
         setEstaAutenticado(true);
         setUsuarioLogado(session.user.user_metadata?.nome || session.user.email);
+        setUsuarioEmail(session.user.email || '');
       }
     };
     verificarSessao();
@@ -133,9 +139,11 @@ export default function DiariasDashboard() {
       if (session) {
         setEstaAutenticado(true);
         setUsuarioLogado(session.user.user_metadata?.nome || session.user.email);
+        setUsuarioEmail(session.user.email || '');
       } else {
         setEstaAutenticado(false);
         setUsuarioLogado('');
+        setUsuarioEmail('');
       }
     });
 
@@ -178,15 +186,11 @@ export default function DiariasDashboard() {
   }, [estaAutenticado, resetarTimer]);
 
 
-  // --- LOGIN COM CRIPTOGRAFIA ---
   const lidarComLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsgAuth({ texto: 'Autenticando...', tipo: 'info' });
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: emailInput,
-        password: senhaInput,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email: emailInput, password: senhaInput });
       if (error) throw error;
       setMsgAuth({ texto: '', tipo: '' });
     } catch (err: any) {
@@ -196,7 +200,7 @@ export default function DiariasDashboard() {
 
   const fazerLogout = async () => {
     await supabase.auth.signOut();
-    setEstaAutenticado(false); setUsuarioLogado('');
+    setEstaAutenticado(false); setUsuarioLogado(''); setUsuarioEmail('');
     setEmailInput(''); setSenhaInput(''); 
     if (timerAviso.current) clearTimeout(timerAviso.current);
     if (timerLogout.current) clearTimeout(timerLogout.current);
@@ -262,6 +266,7 @@ export default function DiariasDashboard() {
   }
 
   const excluirRelatorioGerado = async (ids: string[]) => {
+    if (!isAdmin) return;
     if (confirm(`Tem certeza que deseja desfazer esta tabela gerada? \nAs diárias voltarão para a fila de "A Gerar".`)) {
       try {
         await supabase.from('diarias').update({ data_ultima_exportacao: null, comprovante_url: null }).in('id', ids);
@@ -271,6 +276,7 @@ export default function DiariasDashboard() {
   }
 
   const handleUploadComprovante = async (e: React.ChangeEvent<HTMLInputElement>, ids: string[], key: string) => {
+    if (!isAdmin) return;
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingTabela(key); 
@@ -309,16 +315,18 @@ export default function DiariasDashboard() {
 
   async function adicionarServidor(e: React.FormEvent) {
     e.preventDefault()
-    if(!novoServidor.nome) return;
+    if(!isAdmin || !novoServidor.nome) return;
     const { error } = await supabase.from('servidores').insert([{ nome: novoServidor.nome.toUpperCase(), cargo: novoServidor.cargo.toUpperCase() }])
     if (error) { alert("Erro ao adicionar: " + error.message) } else { setNovoServidor({ nome: '', cargo: '' }); fetchServidores(); }
   }
 
   async function removerServidor(id: number) {
+    if(!isAdmin) return;
     if(confirm("Remover este membro da equipe permanentemente?")) { await supabase.from('servidores').delete().eq('id', id); fetchServidores(); }
   }
 
   async function marcarTabelaPaga(ids: string[]) {
+    if (!isAdmin) return;
     if (confirm(`Confirmar o pagamento destas ${ids.length} diárias de uma só vez?`)) {
       const agora = new Date().toISOString();
       await supabase.from('diarias').update({ pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado }).in('id', ids);
@@ -340,9 +348,28 @@ export default function DiariasDashboard() {
     if (ordemData === 'DESC') return dataB - dataA; else return dataA - dataB;
   })
 
-  const iniciarEdicao = (item: any) => { setIdEditando(item.id); setDadosEditados({ ...item }) }
+  // --- LÓGICA DO DASHBOARD (GRÁFICOS) ---
+  // Cálculo de Gastos Totais (Geral)
+  const dashboardGastoTotal = diariasFiltradas.reduce((acc, d) => acc + (Number(d.valor) || 0), 0);
+  const dashboardGastoSEI = diariasFiltradas.filter(d => d.metodo_pagamento === 'SEI').reduce((acc, d) => acc + (Number(d.valor) || 0), 0);
+  const dashboardGastoSalario = diariasFiltradas.filter(d => d.metodo_pagamento === 'CONTA SALARIO').reduce((acc, d) => acc + (Number(d.valor) || 0), 0);
+  
+  // Ranking dos 5 maiores viajantes
+  const gastosPorPessoa = diariasFiltradas.reduce((acc: any, d) => {
+    acc[d.nome] = (acc[d.nome] || 0) + (Number(d.valor) || 0);
+    return acc;
+  }, {});
+  
+  const rankingTop5 = Object.entries(gastosPorPessoa)
+    .sort((a: any, b: any) => b[1] - a[1])
+    .slice(0, 5);
+  const maiorValorRanking = rankingTop5.length > 0 ? Number(rankingTop5[0][1]) : 1;
+
+
+  const iniciarEdicao = (item: any) => { if(!isAdmin) return; setIdEditando(item.id); setDadosEditados({ ...item }) }
 
   const salvarEdicao = async () => {
+    if(!isAdmin) return;
     const agora = new Date().toISOString();
     const valorFormatado = dadosEditados.valor ? parseFloat(parseFloat(dadosEditados.valor.toString()).toFixed(2)) : 0;
     const dadosFinais = { ...dadosEditados, valor: valorFormatado, updated_at: agora, usuario_alteracao: usuarioLogado };
@@ -389,16 +416,19 @@ export default function DiariasDashboard() {
   }
 
   async function alternarPagamento(id: string, statusAtual: boolean) {
+    if(!isAdmin) return;
     const agora = new Date().toISOString()
     await supabase.from('diarias').update({ pago: !statusAtual, data_pagamento: !statusAtual ? agora : null, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)
     fetchDiarias()
   }
 
   async function excluirDiaria(id: string) {
+    if(!isAdmin) return;
     if (confirm("Excluir este registro?")) { await supabase.from('diarias').delete().eq('id', id); fetchDiarias(); }
   }
 
   const enviarRelatorioWhats = () => {
+    if(!isAdmin) return;
     const pendentes = diarias.filter(d => !d.pago);
     if (pendentes.length === 0) { alert("Parabéns! Tudo está pago. Nada a cobrar."); return; }
 
@@ -441,7 +471,7 @@ export default function DiariasDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-28 relative">
-      {mostrarGerenciarEquipe && (
+      {isAdmin && mostrarGerenciarEquipe && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl p-6 relative">
             <button onClick={() => setMostrarGerenciarEquipe(false)} className="absolute top-4 right-4 bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 w-8 h-8 rounded-full font-bold">X</button>
@@ -482,6 +512,7 @@ export default function DiariasDashboard() {
               <h1 className="text-xl font-black uppercase italic tracking-tighter text-slate-800">Gestão CSIPRC</h1>
               <div className="flex items-center gap-2 border-l pl-3 ml-1 border-slate-200">
                 <span className="text-[10px] font-bold text-blue-600 uppercase">Olá, {usuarioLogado}</span>
+                {isAdmin && <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Admin</span>}
                 <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 px-2 py-1 rounded">SAIR</button>
               </div>
             </div>
@@ -492,7 +523,7 @@ export default function DiariasDashboard() {
 
             <div className="flex flex-col items-end gap-2">
               <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-[9px] font-black text-slate-400 uppercase ml-2">Período p/ Relatório:</span>
+                <span className="text-[9px] font-black text-slate-400 uppercase ml-2">Período:</span>
                 <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
                 <span className="text-[10px] font-bold text-slate-400">ATÉ</span>
                 <input type="date" value={dataFimRelatorio} onChange={(e) => setDataFimRelatorio(e.target.value)} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
@@ -500,15 +531,19 @@ export default function DiariasDashboard() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => setMostrarPortal(true)} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase">🔍 Portal MA</button>
-                <button onClick={() => baixarRelatorioPendentes('SEI')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 GERAR SEI (NOVO)</button>
-                <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 GERAR SALÁRIO (NOVO)</button>
+                {isAdmin && (
+                  <>
+                    <button onClick={() => baixarRelatorioPendentes('SEI')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 GERAR SEI</button>
+                    <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 GERAR SALÁRIO</button>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           <div className="flex flex-col md:flex-row justify-between items-center gap-3">
             <div className="flex bg-slate-100 p-1 rounded-xl gap-2">
-               <button onClick={() => setMostrarGerenciarEquipe(true)} className="px-4 py-2 rounded-lg text-[10px] font-black transition-all bg-slate-900 text-white shadow-md hover:bg-slate-800 flex items-center gap-2">⚙️ GERENCIAR EQUIPE</button>
+               {isAdmin && <button onClick={() => setMostrarGerenciarEquipe(true)} className="px-4 py-2 rounded-lg text-[10px] font-black transition-all bg-slate-900 text-white shadow-md hover:bg-slate-800 flex items-center gap-2">⚙️ EQUIPE</button>}
               {['TODOS', 'SEI', 'CONTA SALARIO'].map(f => (
                 <button key={f} onClick={() => setFiltroMetodo(f)} className={`px-4 py-2 rounded-lg text-[10px] font-black transition-all ${filtroMetodo === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{f === 'CONTA SALARIO' ? 'SALÁRIO' : f}</button>
               ))}
@@ -531,24 +566,77 @@ export default function DiariasDashboard() {
 
       <main className="max-w-7xl mx-auto p-4 lg:p-8">
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border-l-[12px] border-blue-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
-             <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Novas Diárias SEI (A Gerar)</h3>
-                <p className="text-3xl font-black text-slate-900">R$ {totalNovoSEI.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-             </div>
-             <div className="bg-blue-50 p-3 rounded-2xl text-2xl">📂</div> 
-          </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border-l-[12px] border-emerald-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
-             <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Novas Diárias Salário (A Gerar)</h3>
-                <p className="text-3xl font-black text-slate-900">R$ {totalNovoSalario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-             </div>
-             <div className="bg-emerald-50 p-3 rounded-2xl text-2xl">💳</div>
-          </div>
-        </div>
+        {/* --- NOVO: PAINEL DE GRÁFICOS (DASHBOARD ANALYTICS) --- */}
+        {isAdmin && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            
+            {/* Gráfico 1: Gastos SEI vs Salário */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 col-span-1 lg:col-span-2">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Divisão de Custos (Total Filtrado)</h3>
+              <div className="flex items-end gap-6 h-32 mt-4">
+                {/* Barra SEI */}
+                <div className="flex-1 flex flex-col items-center justify-end h-full gap-2 group">
+                  <span className="text-[10px] font-bold text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">R$ {dashboardGastoSEI.toFixed(0)}</span>
+                  <div className="w-full bg-blue-500 rounded-t-xl transition-all duration-1000" style={{ height: `${dashboardGastoTotal > 0 ? (dashboardGastoSEI / dashboardGastoTotal) * 100 : 0}%`, minHeight: '4px' }}></div>
+                  <span className="text-[9px] font-black text-slate-600 uppercase">SEI</span>
+                </div>
+                {/* Barra Salário */}
+                <div className="flex-1 flex flex-col items-center justify-end h-full gap-2 group">
+                  <span className="text-[10px] font-bold text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">R$ {dashboardGastoSalario.toFixed(0)}</span>
+                  <div className="w-full bg-emerald-500 rounded-t-xl transition-all duration-1000" style={{ height: `${dashboardGastoTotal > 0 ? (dashboardGastoSalario / dashboardGastoTotal) * 100 : 0}%`, minHeight: '4px' }}></div>
+                  <span className="text-[9px] font-black text-slate-600 uppercase">Salário</span>
+                </div>
+              </div>
+              <div className="mt-4 text-center border-t border-slate-100 pt-4">
+                <span className="text-2xl font-black text-slate-800">R$ {dashboardGastoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Custo Total no Período</p>
+              </div>
+            </div>
 
-        {tabelasPendentesArray.length > 0 && (
+            {/* Gráfico 2: Ranking Top 5 Viajantes */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 col-span-1">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Top 5 Viajantes (Custo)</h3>
+              <div className="flex flex-col gap-3">
+                {rankingTop5.map((pessoa: any, index: number) => (
+                  <div key={pessoa[0]} className="w-full">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-600 mb-1">
+                      <span className="truncate w-2/3 uppercase">{index + 1}. {pessoa[0]}</span>
+                      <span>R$ {pessoa[1].toFixed(0)}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2">
+                      <div className="bg-slate-800 h-2 rounded-full transition-all duration-1000" style={{ width: `${(pessoa[1] / maiorValorRanking) * 100}%` }}></div>
+                    </div>
+                  </div>
+                ))}
+                {rankingTop5.length === 0 && <p className="text-xs text-center text-slate-400 mt-10">Nenhum dado.</p>}
+              </div>
+            </div>
+            
+          </div>
+        )}
+
+        {/* CARDS DE NOVAS (A GERAR) - SOMENTE PARA ADMIN */}
+        {isAdmin && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border-l-[12px] border-blue-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
+               <div>
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Novas Diárias SEI (A Gerar)</h3>
+                  <p className="text-3xl font-black text-slate-900">R$ {totalNovoSEI.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+               </div>
+               <div className="bg-blue-50 p-3 rounded-2xl text-2xl">📂</div> 
+            </div>
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border-l-[12px] border-emerald-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
+               <div>
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Novas Diárias Salário (A Gerar)</h3>
+                  <p className="text-3xl font-black text-slate-900">R$ {totalNovoSalario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+               </div>
+               <div className="bg-emerald-50 p-3 rounded-2xl text-2xl">💳</div>
+            </div>
+          </div>
+        )}
+
+        {/* TABELAS PENDENTES (Geradas aguardando pgto) - SOMENTE PARA ADMIN */}
+        {isAdmin && tabelasPendentesArray.length > 0 && (
           <div className="mb-8 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
             <h2 className="text-xs font-black text-amber-600 uppercase tracking-widest mb-4 flex items-center gap-2">
               <span className="text-lg">⚠️</span> Pendências (Relatórios Já Gerados)
@@ -660,11 +748,13 @@ export default function DiariasDashboard() {
                                {item.updated_at && <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1">✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}<span className="bg-amber-50 text-amber-600 px-1 rounded border border-amber-100">{item.usuario_alteracao ? `por ${item.usuario_alteracao}` : ''}</span></p>}
                              </div>
                           </div>
-                          <div className="flex gap-2 mt-4 w-full md:w-auto">
-                            <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 md:flex-none px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>{item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}</button>
-                            <button onClick={() => iniciarEdicao(item)} className="bg-white border-2 border-slate-100 px-4 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors">✏️</button>
-                            <button onClick={() => excluirDiaria(item.id)} className="bg-white border-2 border-slate-100 px-4 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">🗑️</button>
-                          </div>
+                          {isAdmin && (
+                            <div className="flex gap-2 mt-4 w-full md:w-auto">
+                              <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 md:flex-none px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>{item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}</button>
+                              <button onClick={() => iniciarEdicao(item)} className="bg-white border-2 border-slate-100 px-4 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors">✏️</button>
+                              <button onClick={() => excluirDiaria(item.id)} className="bg-white border-2 border-slate-100 px-4 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">🗑️</button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -689,11 +779,13 @@ export default function DiariasDashboard() {
         <p className="text-[9px] font-bold text-slate-400 opacity-50 uppercase tracking-widest">Sistema Seguro/LGPD • Dev: Educador Social Junior</p>
       </div>
 
-      <div className="fixed bottom-6 right-6 left-6 md:left-auto md:w-72 z-50">
-        <button onClick={enviarRelatorioWhats} className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl text-[10px] font-black uppercase shadow-2xl border-2 border-slate-700 tracking-widest hover:scale-105 transition-all flex items-center justify-center gap-2">
-          <span>💬</span> Cobrar Pendentes
-        </button>
-      </div>
+      {isAdmin && (
+        <div className="fixed bottom-6 right-6 left-6 md:left-auto md:w-72 z-50">
+          <button onClick={enviarRelatorioWhats} className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl text-[10px] font-black uppercase shadow-2xl border-2 border-slate-700 tracking-widest hover:scale-105 transition-all flex items-center justify-center gap-2">
+            <span>💬</span> Cobrar Pendentes
+          </button>
+        </div>
+      )}
       
       <style jsx>{`
         .input-login { width: 100%; background-color: #f1f5f9; border: 2px solid #94a3b8; padding: 1rem; border-radius: 0.75rem; text-align: center; font-weight: 800; outline: none; color: #000000; transition: all 0.2s; }
