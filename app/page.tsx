@@ -69,9 +69,25 @@ export default function DiariasDashboard() {
   const [usuarioLogado, setUsuarioLogado] = useState('') 
   const [usuarioEmail, setUsuarioEmail] = useState('') 
   
-  // --- NÍVEL DE ACESSO (PERMISSÕES) ---
+  // --- NÍVEL DE ACESSO E LOGS ---
   const emailsAdmin = ['santos.junior12@hotmail.com', 'ederson@live.com']
   const isAdmin = emailsAdmin.includes(usuarioEmail)
+
+  const [mostrarLogs, setMostrarLogs] = useState(false)
+  const [logs, setLogs] = useState<any[]>([])
+
+  const registrarLog = async (acao: string, detalhes: string) => {
+    if (!usuarioLogado) return;
+    try {
+      await supabase.from('logs').insert([{ acao, detalhes, usuario: usuarioLogado }]);
+    } catch (err) { console.error(err); }
+  }
+
+  const abrirPainelLogs = async () => {
+    setMostrarLogs(true);
+    const { data } = await supabase.from('logs').select('*').order('created_at', { ascending: false }).limit(50);
+    if (data) setLogs(data);
+  }
 
   const [emailInput, setEmailInput] = useState('')
   const [senhaInput, setSenhaInput] = useState('')
@@ -284,6 +300,7 @@ export default function DiariasDashboard() {
            await supabase.from('diarias').update({ data_ultima_exportacao: agora }).in('id', idsNaoExportados);
            fetchDiarias();
         }
+        await registrarLog('GERAÇÃO DE RELATÓRIO', `Gerou nova tabela Excel para diárias via ${metodo}.`);
         mostrarToast("Download concluído! Diárias enviadas para pendências.", "sucesso");
       } else { 
         mostrarToast("Erro na API ao gerar Excel: " + data.error, "erro"); 
@@ -311,6 +328,7 @@ export default function DiariasDashboard() {
         link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${data.file}`;
         link.download = `REEMISSAO_TABELA_${metodo}_DIA_${new Date(dataExportacao).toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`;
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        await registrarLog('DOWNLOAD DE RELATÓRIO', `Baixou novamente a tabela antiga de ${metodo}.`);
         mostrarToast("Download refeito com sucesso!", "sucesso");
       } else { 
         mostrarToast("Erro API: " + data.error, "erro"); 
@@ -326,6 +344,7 @@ export default function DiariasDashboard() {
       try {
         await supabase.from('diarias').update({ data_ultima_exportacao: null, comprovante_url: null }).in('id', ids);
         fetchDiarias();
+        await registrarLog('ESTORNO DE TABELA', `Desfez uma tabela exportada. ${ids.length} diárias retornaram para pendentes.`);
         mostrarToast("Tabela desfeita. Diárias retornaram para a fila.", "info");
       } catch (error) { 
         mostrarToast("Erro ao desfazer relatório.", "erro"); 
@@ -345,6 +364,7 @@ export default function DiariasDashboard() {
        if (uploadError) throw uploadError;
        const { data: urlData } = supabase.storage.from('comprovantes').getPublicUrl(fileName);
        await supabase.from('diarias').update({ comprovante_url: urlData.publicUrl }).in('id', ids);
+       await registrarLog('UPLOAD DE BACKUP', `Anexou um comprovante de segurança para a tabela ${key}.`);
        mostrarToast("Cópia de segurança (Backup) anexada com sucesso!", "sucesso");
        fetchDiarias();
     } catch (err: any) { 
@@ -381,6 +401,7 @@ export default function DiariasDashboard() {
     if (error) { 
       mostrarToast("Erro ao adicionar servidor.", "erro"); 
     } else { 
+      await registrarLog('GERENCIAMENTO', `Adicionou o servidor ${novoServidor.nome.toUpperCase()} à equipe.`);
       setNovoServidor({ nome: '', cargo: '' }); 
       fetchServidores(); 
       mostrarToast("Membro da equipe adicionado!", "sucesso");
@@ -391,6 +412,7 @@ export default function DiariasDashboard() {
     if(!isAdmin) return;
     if(confirm("Remover este membro da equipe permanentemente?")) { 
       await supabase.from('servidores').delete().eq('id', id); 
+      await registrarLog('GERENCIAMENTO', `Removeu um servidor da lista de equipe.`);
       fetchServidores(); 
       mostrarToast("Membro removido da equipe.", "info");
     }
@@ -401,6 +423,7 @@ export default function DiariasDashboard() {
     if (confirm(`Confirmar o pagamento destas ${ids.length} diárias de uma só vez?`)) {
       const agora = new Date().toISOString();
       await supabase.from('diarias').update({ pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado }).in('id', ids);
+      await registrarLog('PAGAMENTO EM LOTE', `Marcou uma tabela inteira (${ids.length} viagens) como PAGA.`);
       fetchDiarias();
       mostrarToast(`${ids.length} diárias marcadas como PAGAS!`, "sucesso");
     }
@@ -442,6 +465,7 @@ export default function DiariasDashboard() {
     if (!error) { 
       setIdEditando(null); 
       fetchDiarias(); 
+      await registrarLog('EDIÇÃO', `Atualizou os dados da viagem de ${dadosFinais.nome}.`);
       mostrarToast("Registro atualizado com sucesso!", "sucesso");
     } else { 
       mostrarToast("Erro ao salvar edição: " + error.message, "erro"); 
@@ -477,7 +501,10 @@ export default function DiariasDashboard() {
     try {
       const { error } = await supabase.from('diarias').insert([novaDiaria])
       if (error) { mostrarToast("Erro no banco: " + error.message, "erro"); return; }
+      
+      await registrarLog('CADASTRO', `Cadastrou nova diária para ${novaDiaria.nome} no valor de R$ ${novaDiaria.valor}.`);
       await fetchDiarias();
+      
       if (manterDados) {
         setFormNome(""); 
         mostrarToast("Salvo! Dados mantidos para o próximo.", "sucesso");
@@ -492,6 +519,8 @@ export default function DiariasDashboard() {
     if(!isAdmin) return;
     const agora = new Date().toISOString()
     await supabase.from('diarias').update({ pago: !statusAtual, data_pagamento: !statusAtual ? agora : null, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)
+    
+    await registrarLog('STATUS', `Marcou uma diária como ${!statusAtual ? 'PAGA' : 'PENDENTE'}.`);
     fetchDiarias()
     if(!statusAtual) mostrarToast("Diária marcada como PAGA!", "sucesso");
     else mostrarToast("Pagamento desmarcado (Pendente).", "info");
@@ -501,6 +530,7 @@ export default function DiariasDashboard() {
     if(!isAdmin) return;
     if (confirm("Excluir este registro permanentemente?")) { 
       await supabase.from('diarias').delete().eq('id', id); 
+      await registrarLog('EXCLUSÃO', `Removeu definitivamente um registro do sistema.`);
       fetchDiarias(); 
       mostrarToast("Registro excluído.", "info");
     }
@@ -575,6 +605,35 @@ export default function DiariasDashboard() {
         </div>
       )}
 
+      {/* MODAL DE AUDITORIA (LOGS) */}
+      {isAdmin && mostrarLogs && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
+            <button onClick={() => setMostrarLogs(false)} className="absolute top-4 right-4 bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 w-8 h-8 rounded-full font-bold">X</button>
+            <h2 className="text-xl font-black text-slate-800 mb-2 uppercase italic flex items-center gap-2">🕵️‍♂️ Auditoria (Histórico)</h2>
+            <p className="text-xs text-slate-500 mb-6">Registro das últimas 50 ações executadas no sistema.</p>
+            
+            <div className="overflow-y-auto space-y-3 pr-2 hide-scrollbar flex-1">
+              {logs.map(log => (
+                <div key={log.id} className="flex flex-col sm:flex-row justify-between sm:items-center bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-100 gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-black text-white bg-slate-800 px-2 py-1 rounded uppercase tracking-wider">{log.acao}</span>
+                      <span className="text-[10px] font-bold text-slate-500">{new Date(log.created_at).toLocaleString('pt-BR')}</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-700">{log.detalhes}</p>
+                  </div>
+                  <div className="text-left sm:text-right mt-1 sm:mt-0">
+                    <span className="text-[10px] font-bold text-blue-600 uppercase bg-blue-50 border border-blue-100 px-2 py-1 rounded">{log.usuario}</span>
+                  </div>
+                </div>
+              ))}
+              {logs.length === 0 && <p className="text-center text-slate-400 text-xs italic mt-10">Nenhum registro encontrado ainda.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isAdmin && mostrarGerenciarEquipe && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl p-6 relative">
@@ -612,7 +671,6 @@ export default function DiariasDashboard() {
       <nav className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto p-4 flex flex-col gap-4">
           
-          {/* HEADER TOP (Logo e User) */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-black uppercase italic tracking-tighter text-slate-800">Gestão CSIPRC</h1>
@@ -622,11 +680,11 @@ export default function DiariasDashboard() {
                 <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 px-2 py-1 rounded">SAIR</button>
               </div>
             </div>
-            {/* PORTAL E EXPORT NO MOBILE FICAM AQUI EM CIMA PARA ECONOMIZAR ESPAÇO */}
             <div className="flex flex-wrap gap-2 w-full sm:w-auto mt-2 sm:mt-0">
                 <button onClick={() => setMostrarPortal(true)} className="flex-1 sm:flex-none bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase text-center">🔍 Portal MA</button>
                 {isAdmin && (
                   <>
+                    <button onClick={abrirPainelLogs} className="flex-1 sm:flex-none bg-slate-800 hover:bg-black text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors text-center">🕵️‍♂️ AUDITORIA</button>
                     <button onClick={() => baixarRelatorioPendentes('SEI')} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors text-center">📥 SEI</button>
                     <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors text-center">📥 SALÁRIO</button>
                   </>
@@ -634,7 +692,6 @@ export default function DiariasDashboard() {
             </div>
           </div>
             
-          {/* BUSCA E FILTROS DE DATA */}
           <div className="flex flex-col md:flex-row justify-between gap-4">
             <div className="flex-1 max-w-xl">
               <input type="text" placeholder="🔍 Buscar Servidor ou Destino..." className="w-full bg-slate-100 border-none p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 font-medium" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)} />
@@ -658,10 +715,7 @@ export default function DiariasDashboard() {
             </div>
           </div>
 
-          {/* FILTROS RÁPIDOS SWIPE ON MOBILE */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-            
-            {/* Metodo */}
             <div className="flex overflow-x-auto hide-scrollbar bg-slate-100 p-1 rounded-xl gap-2 w-full md:w-auto">
                {isAdmin && <button onClick={() => setMostrarGerenciarEquipe(true)} className="shrink-0 px-4 py-2 rounded-lg text-[10px] font-black transition-all bg-slate-900 text-white shadow-md hover:bg-slate-800 flex items-center gap-2">⚙️ EQUIPE</button>}
               {['TODOS', 'SEI', 'CONTA SALARIO'].map(f => (
@@ -669,7 +723,6 @@ export default function DiariasDashboard() {
               ))}
             </div>
             
-            {/* Status e Ordem */}
             <div className="flex overflow-x-auto hide-scrollbar gap-2 w-full md:w-auto justify-start md:justify-end">
                 <div className="flex shrink-0 bg-slate-100 p-1 rounded-xl">
                   <button onClick={() => setOrdemData(prev => prev === 'DESC' ? 'ASC' : 'DESC')} className="px-3 py-2 rounded-lg text-[10px] font-black transition-all bg-white text-slate-900 shadow-sm hover:bg-blue-50 text-blue-800 flex items-center gap-1">
@@ -688,7 +741,6 @@ export default function DiariasDashboard() {
 
       <main className="max-w-7xl mx-auto p-4 lg:p-8">
         
-        {/* DASHBOARD ANALYTICS */}
         {isAdmin && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
             <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 col-span-1 lg:col-span-2">
@@ -848,7 +900,6 @@ export default function DiariasDashboard() {
                     ) : (
                       <div className="flex flex-col sm:flex-row justify-between gap-4">
                         <div className="flex-1">
-                          {/* Top Badges (Status, Date) - wraps nicely on mobile */}
                           <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-2">
                             <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-wider ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 animate-pulse'}`}>{item.pago ? '✓ PAGO' : '⚠ PENDENTE'}</span>
                             <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md">{formatarDataBR(item.data_viagem)}</span>
@@ -867,7 +918,6 @@ export default function DiariasDashboard() {
                           </div>
                         </div>
                         
-                        {/* Values and Action Buttons */}
                         <div className="sm:text-right flex flex-col justify-between items-start sm:items-end border-t sm:border-t-0 pt-4 sm:pt-0 mt-2 sm:mt-0">
                           <div className="text-left sm:text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end">
                              <p className="font-black text-slate-900 text-xl sm:text-2xl">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
