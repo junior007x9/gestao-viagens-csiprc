@@ -20,11 +20,19 @@ export async function POST(req: Request) {
     const workbook = await XlsxPopulate.fromFileAsync(templatePath);
     const sheet = workbook.sheet(0);
 
-    // 3. Prepara a Planilha: Limpa resíduos e bordas antigas
-    for (let r = 10; r <= 300; r++) {
-        sheet.row(r).hidden(false); 
+    // --- CORREÇÃO CRÍTICA: GARANTIR QUE TODAS AS LINHAS ESTEJAM VISÍVEIS ---
+    // Pega a altura da linha 10 como base (ou 25 se falhar)
+    const alturaBase = sheet.row(10).height() || 25;
+
+    // 3. Prepara a Planilha: Limpa resíduos e FORÇA a exibição das linhas
+    // Aumentamos para 800 linhas para garantir que tabelas gigantes não quebrem
+    for (let r = 10; r <= 800; r++) {
+        const linha = sheet.row(r);
+        linha.hidden(false); // Remove o atributo de "linha oculta"
+        linha.height(alturaBase); // Força a altura para não ficar "esmagada"
+        
         ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(c => {
-            sheet.cell(`${c}${r}`).value(undefined).style("border", undefined);
+            sheet.cell(`${c}${r}`).value(undefined).style("border", undefined).style("fill", undefined);
         });
     }
 
@@ -84,12 +92,13 @@ export async function POST(req: Request) {
         // 6.1 Insere a faixa (banner) avisando a data
         if (dataExp !== 'NOVAS') {
             const dataFormatada = dataExp.split('-').reverse().join('/');
+            sheet.row(row).hidden(false).height(30); // Garante que a linha do banner apareça
             sheet.range(`A${row}:H${row}`).merged(true)
                  .value(`TABELA GERADA DIA ${dataFormatada}`)
                  .style({ bold: true, fill: 'FFF9C4', fontColor: '000000', horizontalAlignment: 'center', verticalAlignment: 'center', border: true });
             row++;
         } else if (datasOrdenadas.length > 1) {
-             // Só avisa que é NOVA se estiver misturado com tabelas velhas
+             sheet.row(row).hidden(false).height(30); // Garante que a linha do banner apareça
              sheet.range(`A${row}:H${row}`).merged(true)
                   .value(`🆕 NOVAS DIÁRIAS`)
                   .style({ bold: true, fill: 'E8F5E9', fontColor: '000000', horizontalAlignment: 'center', verticalAlignment: 'center', border: true });
@@ -104,26 +113,22 @@ export async function POST(req: Request) {
              
              arrayViagens.forEach((item, indexViagem) => {
                  ultimaLinhaDados = row;
-                 const isFirst = indexViagem === 0; // Verifica se é a primeira viagem desta pessoa
+                 const isFirst = indexViagem === 0;
 
-                 // Aplica a altura original e os estilos guardados
-                 const alturaLinha10 = sheet.row(10).height();
-                 if (alturaLinha10) sheet.row(row).height(alturaLinha10);
+                 // FORÇA a linha a ficar visível e com altura correta EXATAMENTE AGORA
+                 sheet.row(row).hidden(false).height(alturaBase);
                  
                  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => aplicarEstiloBase(row, col));
 
-                 // Ajuste da Data de Viagem para formato BR
                  let dataViagem = item.data_viagem;
                  if (dataViagem && typeof dataViagem === 'string') {
                    const parts = dataViagem.split('T')[0].split('-');
                    if(parts.length === 3) dataViagem = `${parts[2]}/${parts[1]}/${parts[0]}`;
                  }
 
-                 // Textos para evitar repetição visual
                  const txtPessoa = isFirst ? item.nome : '"';
                  const txtCargo = isFirst ? item.cargo : '"';
 
-                 // Preenchimento das Células
                  if (metodoSelecionado === 'SEI') {
                     sheet.cell(`A${row}`).value(indexGeral++);
                     sheet.cell(`B${row}`).value(txtPessoa).style({ horizontalAlignment: isFirst ? 'left' : 'center', fontColor: isFirst ? '000000' : '888888' });
@@ -149,11 +154,10 @@ export async function POST(req: Request) {
                  row++;
              });
 
-             // 6.3 SUBTOTAL (Insere somente se a pessoa tiver mais de 1 viagem)
              if (arrayViagens.length > 1) {
                  ultimaLinhaDados = row;
+                 sheet.row(row).hidden(false).height(alturaBase); // Força linha do subtotal
                  
-                 // Fundo cinza para o subtotal
                  if (metodoSelecionado === 'SEI') {
                      sheet.range(`A${row}:G${row}`).merged(true).value(`SUBTOTAL - ${nome}`).style({ bold: true, horizontalAlignment: 'right', fill: 'F3F4F6', border: true });
                      sheet.cell(`H${row}`).value(arrayViagens.length).style({ bold: true, horizontalAlignment: 'center', fill: 'F3F4F6', border: true });
@@ -170,6 +174,8 @@ export async function POST(req: Request) {
     // 7. Cálculo do TOTAL GERAL
     if (ultimaLinhaDados < 10) ultimaLinhaDados = 10;
     const linhaTotal = ultimaLinhaDados + 2;
+
+    sheet.row(linhaTotal).hidden(false).height(alturaBase); // Força linha do total a aparecer
 
     if (metodoSelecionado === 'SEI') {
       sheet.cell(`G${linhaTotal}`).value("TOTAL GERAL:").style({ bold: true, horizontalAlignment: 'right' });
