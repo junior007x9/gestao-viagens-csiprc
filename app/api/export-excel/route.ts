@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     // Pega a altura da linha 10 como base (ou 25 se falhar)
     const alturaBase = sheet.row(10).height() || 25;
 
-    // --- CORREÇÃO CRÍTICA E REMOÇÃO DE ASSINATURA ---
+    // --- CORREÇÃO CRÍTICA ---
     for (let r = 10; r <= 800; r++) {
         const linha = sheet.row(r);
         linha.hidden(false); // Remove ocultação
@@ -34,9 +34,6 @@ export async function POST(req: Request) {
             cell.value(undefined); // Limpa valor
             cell.style("border", undefined); // Limpa bordas do modelo
             cell.style("fill", undefined); // Limpa preenchimento do modelo
-            
-            // Garante que não há células mescladas escondidas quebrando o Excel
-            cell.merged(false); 
         });
     }
 
