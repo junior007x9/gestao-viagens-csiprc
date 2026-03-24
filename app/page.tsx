@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
-// --- COMPONENTE DE AUTOCOMPLETE ---
+// --- COMPONENTE DE AUTOCOMPLETE CORRIGIDO ---
 const AutocompleteInput = ({ 
   label, value, onChange, sugestoes, placeholder, required = false, name
 }: any) => {
@@ -109,6 +109,37 @@ export default function DiariasDashboard() {
   const [avisoInativo, setAvisoInativo] = useState(false); 
   const [segundosRestantes, setSegundosRestantes] = useState(60); 
 
+  // --- FILTROS RÁPIDOS DE TEMPO (NOVO) ---
+  const aplicarFiltroRapido = (tipo: 'HOJE' | '7DIAS' | 'ESTE_MES' | 'MES_PASSADO') => {
+    const hoje = new Date();
+    let inicio = new Date();
+    let fim = new Date();
+
+    if (tipo === 'HOJE') {
+      // inicio e fim já são hoje
+    } else if (tipo === '7DIAS') {
+      inicio.setDate(hoje.getDate() - 7);
+    } else if (tipo === 'ESTE_MES') {
+      inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0); // Último dia do mês atual
+    } else if (tipo === 'MES_PASSADO') {
+      inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0); // Último dia do mês passado
+    }
+
+    // Formatar para YYYY-MM-DD considerando fuso horário local
+    const formatarLocalYMD = (d: Date) => {
+      const ano = d.getFullYear();
+      const mes = String(d.getMonth() + 1).padStart(2, '0');
+      const dia = String(d.getDate()).padStart(2, '0');
+      return `${ano}-${mes}-${dia}`;
+    }
+
+    setDataInicioRelatorio(formatarLocalYMD(inicio));
+    setDataFimRelatorio(formatarLocalYMD(fim));
+    mostrarToast("Filtro de data aplicado!", "info");
+  }
+
   const diariasNaoGeradasNoPeriodo = diarias.filter(d => {
     let valido = !d.pago && !d.data_ultima_exportacao;
     if (dataInicioRelatorio) valido = valido && d.data_viagem >= dataInicioRelatorio;
@@ -133,7 +164,6 @@ export default function DiariasDashboard() {
 
   const tabelasPendentesArray = Object.values(tabelasPendentes).sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
 
-  // 1. VERIFICAR SESSÃO NO SUPABASE AUTH
   useEffect(() => {
     const verificarSessao = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -504,7 +534,6 @@ export default function DiariasDashboard() {
   if (!estaAutenticado) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 to-slate-900 p-4 relative overflow-hidden">
-        {/* COMPONENTE DO TOAST (TELA DE LOGIN) */}
         {toast && (
           <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm text-white flex items-center gap-3 animate-slideDown ${
             toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'
@@ -540,7 +569,6 @@ export default function DiariasDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-28 relative">
       
-      {/* COMPONENTE DO TOAST (DASHBOARD) */}
       {toast && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm text-white flex items-center gap-3 animate-slideDown ${
           toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'
@@ -601,14 +629,25 @@ export default function DiariasDashboard() {
             </div>
 
             <div className="flex flex-col items-end gap-2">
-              <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-[9px] font-black text-slate-400 uppercase ml-2">Período:</span>
-                <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
-                <span className="text-[10px] font-bold text-slate-400">ATÉ</span>
-                <input type="date" value={dataFimRelatorio} onChange={(e) => setDataFimRelatorio(e.target.value)} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
-                <button onClick={() => { setDataInicioRelatorio(''); setDataFimRelatorio(''); }} className="text-[9px] text-slate-400 hover:text-red-500 mr-2" title="Limpar Período">✖</button>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
+                  <span className="text-[9px] font-black text-slate-400 uppercase ml-2">Período:</span>
+                  <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
+                  <span className="text-[10px] font-bold text-slate-400">ATÉ</span>
+                  <input type="date" value={dataFimRelatorio} onChange={(e) => setDataFimRelatorio(e.target.value)} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
+                  <button onClick={() => { setDataInicioRelatorio(''); setDataFimRelatorio(''); mostrarToast('Filtro de data limpo', 'info'); }} className="text-[9px] text-slate-400 hover:text-red-500 mr-2" title="Limpar Período">✖</button>
+                </div>
+                
+                {/* BOTÕES RÁPIDOS DE DATA */}
+                <div className="flex gap-1 justify-end">
+                  <button onClick={() => aplicarFiltroRapido('HOJE')} className="text-[8px] bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 px-2 py-0.5 rounded font-bold uppercase transition-colors">Hoje</button>
+                  <button onClick={() => aplicarFiltroRapido('7DIAS')} className="text-[8px] bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 px-2 py-0.5 rounded font-bold uppercase transition-colors">7 Dias</button>
+                  <button onClick={() => aplicarFiltroRapido('ESTE_MES')} className="text-[8px] bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 px-2 py-0.5 rounded font-bold uppercase transition-colors">Este Mês</button>
+                  <button onClick={() => aplicarFiltroRapido('MES_PASSADO')} className="text-[8px] bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 px-2 py-0.5 rounded font-bold uppercase transition-colors">Mês Passado</button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+
+              <div className="flex flex-wrap gap-2 mt-1">
                 <button onClick={() => setMostrarPortal(true)} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase">🔍 Portal MA</button>
                 {isAdmin && (
                   <>
