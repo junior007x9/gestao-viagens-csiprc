@@ -108,6 +108,14 @@ export default function DiariasDashboard() {
   const [ordemData, setOrdemData] = useState<'DESC' | 'ASC'>('ASC')
   const [manterDados, setManterDados] = useState(false)
 
+  // --- NOVO: ESTADO DA PAGINAÇÃO ---
+  const [limiteVisivel, setLimiteVisivel] = useState(50)
+
+  // Zera a paginação toda vez que usar um filtro novo para voltar pro topo
+  useEffect(() => {
+    setLimiteVisivel(50);
+  }, [pesquisa, filtroMetodo, filtroStatus, dataInicioRelatorio, dataFimRelatorio, ordemData]);
+
   const [formNome, setFormNome] = useState('')
   const [formCargo, setFormCargo] = useState('')
   const [formLocal, setFormLocal] = useState('')
@@ -135,7 +143,6 @@ export default function DiariasDashboard() {
     } catch { return dataStr; }
   };
 
-  // --- NOVA FUNÇÃO: GERADOR DE RECIBO PDF NATIVO ---
   const gerarReciboPDF = (diaria: any) => {
     const valorFormatado = Number(diaria.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const dataViagem = formatarDataBR(diaria.data_viagem);
@@ -710,6 +717,7 @@ export default function DiariasDashboard() {
         </div>
       )}
 
+      {/* MODAL DE AUDITORIA (LOGS) */}
       {isAdmin && mostrarLogs && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
@@ -982,7 +990,8 @@ export default function DiariasDashboard() {
               {diariasFiltradas.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-10 sm:p-20 opacity-50"><div className="text-4xl mb-2">📭</div><p className="font-bold text-slate-400 text-sm text-center">Nenhum registro encontrado.</p></div>
               ) : (
-                diariasFiltradas.map((item) => (
+                /* --- NOVO: LIMITANDO A RENDERIZAÇÃO PARA PAGINAÇÃO --- */
+                diariasFiltradas.slice(0, limiteVisivel).map((item) => (
                   <div key={item.id} className={`bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] transition-all duration-300 ${item.pago ? 'border-green-500 bg-slate-50 opacity-90 hover:opacity-100' : 'border-red-500 shadow-md transform hover:-translate-y-1'}`}>
                     {idEditando === item.id ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative">
@@ -1032,7 +1041,6 @@ export default function DiariasDashboard() {
                                  </label>
                                )}
 
-                               {/* BOTÃO GERAR RECIBO (NOVO) */}
                                <button onClick={() => gerarReciboPDF(item)} className="text-[10px] font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 transition-colors">
                                  🖨️ Imprimir Recibo
                                </button>
@@ -1061,6 +1069,18 @@ export default function DiariasDashboard() {
                     )}
                   </div>
                 ))
+              )}
+
+              {/* --- BOTAO CARREGAR MAIS (NOVO) --- */}
+              {limiteVisivel < diariasFiltradas.length && (
+                <div className="flex justify-center mt-6 mb-8">
+                  <button 
+                    onClick={() => setLimiteVisivel(prev => prev + 50)} 
+                    className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 font-black py-4 sm:py-3 px-8 rounded-2xl sm:rounded-xl text-[10px] sm:text-xs uppercase tracking-widest transition-colors shadow-sm active:scale-95"
+                  >
+                    🔄 Mostrar mais antigas... ({diariasFiltradas.length - limiteVisivel} ocultas)
+                  </button>
+                </div>
               )}
             </div>
           </section>
