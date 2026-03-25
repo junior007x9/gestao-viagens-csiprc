@@ -116,6 +116,7 @@ export default function DiariasDashboard() {
   const [dadosEditados, setDadosEditados] = useState<any>({})
 
   const [uploadingTabela, setUploadingTabela] = useState<string | null>(null)
+  const [uploadingReciboId, setUploadingReciboId] = useState<string | null>(null) // NOVO: Controle de upload individual
 
   const TEMPO_ATE_AVISO = 119 * 60 * 1000; 
   const TEMPO_DO_AVISO_ATE_LOGOUT = 1 * 60 * 1000;
@@ -371,6 +372,28 @@ export default function DiariasDashboard() {
        mostrarToast("Erro ao enviar arquivo: " + err.message, "erro"); 
     } finally { 
        setUploadingTabela(null); 
+    }
+  }
+
+  // --- NOVA FUNÇÃO: UPLOAD INDIVIDUAL DE RECIBO ---
+  const handleUploadReciboIndividual = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingReciboId(id); 
+    try {
+       const extensao = file.name.split('.').pop();
+       const fileName = `recibo_${id}_${Date.now()}.${extensao}`;
+       const { error: uploadError } = await supabase.storage.from('comprovantes').upload(fileName, file);
+       if (uploadError) throw uploadError;
+       const { data: urlData } = supabase.storage.from('comprovantes').getPublicUrl(fileName);
+       await supabase.from('diarias').update({ recibo_url: urlData.publicUrl }).eq('id', id);
+       await registrarLog('ANEXO INDIVIDUAL', `Anexou um recibo/foto para uma viagem individual.`);
+       mostrarToast("Recibo anexado com sucesso!", "sucesso");
+       fetchDiarias();
+    } catch (err: any) { 
+       mostrarToast("Erro ao anexar arquivo: " + err.message, "erro"); 
+    } finally { 
+       setUploadingReciboId(null); 
     }
   }
 
@@ -915,6 +938,20 @@ export default function DiariasDashboard() {
                             <p className="flex items-start gap-2">📍 <span className="font-bold text-slate-800 uppercase flex-1">{item.local_viagem}</span></p>
                             <p className="uppercase flex items-start gap-2">📄 <span>{item.metodo_pagamento} {item.numero_processo ? `| SEI: ${item.numero_processo}` : ''}</span></p>
                             {item.observacoes && <p className="italic text-slate-400 mt-2 border-t pt-2 border-slate-200 sm:border-slate-100">Obs: "{item.observacoes}"</p>}
+                            
+                            {/* --- BOTÃO DE ANEXAR/VER RECIBO (NOVO) --- */}
+                            <div className="mt-3 pt-2 border-t border-slate-200 sm:border-slate-100 flex gap-2">
+                               {item.recibo_url ? (
+                                 <a href={item.recibo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors">
+                                   📄 Ver Recibo
+                                 </a>
+                               ) : (
+                                 <label className="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 cursor-pointer transition-colors">
+                                   {uploadingReciboId === item.id ? '⏳ Enviando...' : '📎 Anexar Recibo'}
+                                   <input type="file" className="hidden" accept="image/*,.pdf" disabled={uploadingReciboId === item.id} onChange={(e) => handleUploadReciboIndividual(e, item.id)} />
+                                 </label>
+                               )}
+                            </div>
                           </div>
                         </div>
                         
