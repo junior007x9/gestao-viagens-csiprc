@@ -116,7 +116,7 @@ export default function DiariasDashboard() {
   const [dadosEditados, setDadosEditados] = useState<any>({})
 
   const [uploadingTabela, setUploadingTabela] = useState<string | null>(null)
-  const [uploadingReciboId, setUploadingReciboId] = useState<string | null>(null) // NOVO: Controle de upload individual
+  const [uploadingReciboId, setUploadingReciboId] = useState<string | null>(null)
 
   const TEMPO_ATE_AVISO = 119 * 60 * 1000; 
   const TEMPO_DO_AVISO_ATE_LOGOUT = 1 * 60 * 1000;
@@ -125,6 +125,98 @@ export default function DiariasDashboard() {
   const timerLogout = useRef<NodeJS.Timeout | null>(null);
   const [avisoInativo, setAvisoInativo] = useState(false); 
   const [segundosRestantes, setSegundosRestantes] = useState(60); 
+
+  const formatarDataBR = (dataStr: string) => {
+    if (!dataStr) return "---";
+    try {
+      const parts = dataStr.split('T')[0].split('-');
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return new Date(dataStr).toLocaleDateString('pt-BR');
+    } catch { return dataStr; }
+  };
+
+  // --- NOVA FUNÇÃO: GERADOR DE RECIBO PDF NATIVO ---
+  const gerarReciboPDF = (diaria: any) => {
+    const valorFormatado = Number(diaria.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const dataViagem = formatarDataBR(diaria.data_viagem);
+    const dataEmissao = new Date().toLocaleDateString('pt-BR');
+
+    const htmlRecibo = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Recibo - ${diaria.nome}</title>
+          <style>
+            body { font-family: 'Arial', sans-serif; padding: 40px; color: #1e293b; max-width: 800px; margin: 0 auto; }
+            .cabecalho { text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 20px; margin-bottom: 30px; }
+            h1 { margin: 0; font-size: 24px; text-transform: uppercase; color: #0f172a; }
+            h2 { margin: 5px 0 0; font-size: 14px; color: #64748b; font-weight: normal; }
+            .conteudo { line-height: 1.8; font-size: 15px; }
+            .destaque { font-weight: bold; color: #0f172a; text-transform: uppercase; }
+            ul { list-style-type: none; padding: 0; margin: 20px 0; }
+            li { padding: 8px 0; border-bottom: 1px dashed #e2e8f0; }
+            .box-valor { font-size: 22px; font-weight: black; margin: 30px 0; padding: 15px; background-color: #f8fafc; border: 1px solid #e2e8f0; text-align: center; border-radius: 8px; }
+            .assinatura { margin-top: 80px; text-align: center; }
+            .linha { border-top: 1px solid #333; width: 350px; margin: 0 auto 10px; }
+            .rodape { margin-top: 50px; text-align: center; font-size: 10px; color: #94a3b8; }
+            @media print {
+              body { padding: 0; }
+              .box-valor { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="cabecalho">
+            <h1>Recibo de Diária / Viagem</h1>
+            <h2>Centro Socioeducativo de Internação Provisória da Região dos Cocais (CSIPRC)</h2>
+          </div>
+          
+          <div class="conteudo">
+            <p>Recebi(emos) do <strong>Governo do Estado do Maranhão / CSIPRC</strong>, a importância de <span class="destaque">${valorFormatado}</span> referente ao pagamento de despesas e diárias detalhadas abaixo:</p>
+            
+            <ul>
+              <li><strong>Servidor(a):</strong> <span class="destaque">${diaria.nome}</span></li>
+              <li><strong>Cargo:</strong> ${diaria.cargo || 'Não informado'}</li>
+              <li><strong>Destino:</strong> ${diaria.local_viagem}</li>
+              <li><strong>Motivo / Adolescente:</strong> ${diaria.adolescente_nome}</li>
+              <li><strong>Data da Viagem:</strong> ${dataViagem}</li>
+              <li><strong>Processo SEI:</strong> ${diaria.numero_processo || 'Sem processo'}</li>
+              <li><strong>Método Pagamento:</strong> ${diaria.metodo_pagamento}</li>
+            </ul>
+
+            <div class="box-valor">VALOR TOTAL: ${valorFormatado}</div>
+
+            <p style="text-align: justify;">Para maior clareza e fins de comprovação, firmo o presente recibo dando plena e geral quitação.</p>
+          </div>
+
+          <div class="assinatura">
+            <div class="linha"></div>
+            <p class="destaque">${diaria.nome}</p>
+            <p>Timon - MA, ${dataEmissao}</p>
+          </div>
+
+          <div class="rodape">
+            Documento gerado eletronicamente pelo Sistema de Gestão CSIPRC
+          </div>
+
+          <script>
+            window.onload = function() { 
+              setTimeout(function() { window.print(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `;
+
+    const janela = window.open('', '', 'width=800,height=800');
+    if (janela) {
+      janela.document.write(htmlRecibo);
+      janela.document.close();
+      registrarLog('EMISSÃO DE RECIBO', `Gerou o PDF/Recibo de viagem para ${diaria.nome}.`);
+    } else {
+      mostrarToast("O navegador bloqueou o pop-up. Permita pop-ups para imprimir.", "erro");
+    }
+  }
 
   const aplicarFiltroRapido = (tipo: 'HOJE' | '7DIAS' | 'ESTE_MES' | 'MES_PASSADO') => {
     const hoje = new Date();
@@ -262,15 +354,6 @@ export default function DiariasDashboard() {
     if (timerLogout.current) clearTimeout(timerLogout.current);
   }
 
-  const formatarDataBR = (dataStr: string) => {
-    if (!dataStr) return "---";
-    try {
-      const parts = dataStr.split('T')[0].split('-');
-      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-      return new Date(dataStr).toLocaleDateString('pt-BR');
-    } catch { return dataStr; }
-  };
-
   const baixarRelatorioPendentes = async (metodo: string) => {
     let listaPendentes = diarias.filter(d => !d.pago && d.metodo_pagamento === metodo && !d.data_ultima_exportacao);
     if (dataInicioRelatorio) listaPendentes = listaPendentes.filter(d => d.data_viagem >= dataInicioRelatorio);
@@ -375,7 +458,6 @@ export default function DiariasDashboard() {
     }
   }
 
-  // --- NOVA FUNÇÃO: UPLOAD INDIVIDUAL DE RECIBO ---
   const handleUploadReciboIndividual = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -628,7 +710,6 @@ export default function DiariasDashboard() {
         </div>
       )}
 
-      {/* MODAL DE AUDITORIA (LOGS) */}
       {isAdmin && mostrarLogs && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
@@ -939,11 +1020,10 @@ export default function DiariasDashboard() {
                             <p className="uppercase flex items-start gap-2">📄 <span>{item.metodo_pagamento} {item.numero_processo ? `| SEI: ${item.numero_processo}` : ''}</span></p>
                             {item.observacoes && <p className="italic text-slate-400 mt-2 border-t pt-2 border-slate-200 sm:border-slate-100">Obs: "{item.observacoes}"</p>}
                             
-                            {/* --- BOTÃO DE ANEXAR/VER RECIBO (NOVO) --- */}
-                            <div className="mt-3 pt-2 border-t border-slate-200 sm:border-slate-100 flex gap-2">
+                            <div className="mt-3 pt-3 border-t border-slate-200 sm:border-slate-100 flex flex-wrap gap-2">
                                {item.recibo_url ? (
                                  <a href={item.recibo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors">
-                                   📄 Ver Recibo
+                                   📄 Ver Recibo Anexado
                                  </a>
                                ) : (
                                  <label className="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 cursor-pointer transition-colors">
@@ -951,6 +1031,11 @@ export default function DiariasDashboard() {
                                    <input type="file" className="hidden" accept="image/*,.pdf" disabled={uploadingReciboId === item.id} onChange={(e) => handleUploadReciboIndividual(e, item.id)} />
                                  </label>
                                )}
+
+                               {/* BOTÃO GERAR RECIBO (NOVO) */}
+                               <button onClick={() => gerarReciboPDF(item)} className="text-[10px] font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 transition-colors">
+                                 🖨️ Imprimir Recibo
+                               </button>
                             </div>
                           </div>
                         </div>
