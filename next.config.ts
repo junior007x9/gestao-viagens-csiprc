@@ -10,7 +10,7 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
-  /* suas outras configurações do next podem ficar aqui dentro */
+  turbopack: {}, // <-- Esta é a linha que resolve o erro
 };
 
 export default withPWA(nextConfig);
