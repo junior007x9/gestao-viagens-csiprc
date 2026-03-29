@@ -33,10 +33,10 @@ const AutocompleteInput = ({
     <div className="relative w-full">
       <input
         name={name} value={value} onChange={aoDigitar} onBlur={aoPerderFoco} placeholder={placeholder} required={required} autoComplete="off"
-        className="w-full border p-2.5 rounded-xl bg-slate-50 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all uppercase"
+        className="w-full border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all uppercase"
       />
       {mostrar && filtrados.length > 0 && (
-        <ul className="absolute z-[999] w-full bg-white border border-slate-200 mt-1 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+        <ul className="absolute z-[999] w-full bg-white border border-slate-200 mt-1 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
           {filtrados.map((item, index) => (
             <li key={index} onMouseDown={(e) => selecionar(e, item)} className="px-4 py-3 hover:bg-blue-100 cursor-pointer text-sm font-bold text-slate-800 border-b border-slate-100 last:border-none transition-colors uppercase">
               {item}
@@ -427,12 +427,12 @@ export default function DiariasDashboard() {
               // Dá baixa como gerada e PAGA imediatamente para "A Gerar" sumir e ir pro Histórico.
               await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, pago: true, data_pagamento: agora }).eq('id', id)));
               setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora } : d));
-              mostrarToast("Download concluído! Diárias marcadas como geradas e pagas automaticamente.", "sucesso");
+              mostrarToast("Transferência concluída! Diárias marcadas como geradas e pagas automaticamente.", "sucesso");
            } else {
               // SEI vai para Pendências amarelas
               await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora }).eq('id', id)));
               setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora } : d));
-              mostrarToast("Download concluído! Diárias enviadas para pendências.", "sucesso");
+              mostrarToast("Transferência concluída! Diárias enviadas para pendências.", "sucesso");
            }
            
            await registrarLog('GERAÇÃO DE RELATÓRIO', `Gerou nova tabela Excel para diárias via ${metodo}.`);
@@ -858,7 +858,7 @@ export default function DiariasDashboard() {
         </div>
       )}
 
-      <nav className="bg-white border-b sticky top-0 z-50 shadow-sm">
+      <nav className="bg-white border-b sticky top-0 z-50 shadow-sm w-full">
         <div className="max-w-7xl mx-auto p-4 flex flex-col gap-4">
           
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -929,7 +929,7 @@ export default function DiariasDashboard() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-4 lg:p-8">
+      <main className="max-w-7xl mx-auto p-4 lg:p-8 w-full">
         
         {isAdmin && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
@@ -948,7 +948,7 @@ export default function DiariasDashboard() {
                 </div>
               </div>
               <div className="mt-4 text-center border-t border-slate-100 pt-4">
-                <span className="text-xl sm:text-2xl font-black text-slate-800 break-words">R$ {dashboardGastoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                <span className="text-xl sm:text-2xl font-black text-slate-800">R$ {dashboardGastoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                 <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">Custo Total no Período</p>
               </div>
             </div>
@@ -1004,7 +1004,7 @@ export default function DiariasDashboard() {
 
         {/* --- GERENCIADOR DE TABELAS (PENDENTES E PAGAS) --- */}
         {isAdmin && (tabelasPendentesArray.length > 0 || tabelasPagasArray.length > 0) && (
-          <div className="mb-8 bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100">
+          <div className="mb-8 bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 w-full">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xs font-black text-amber-600 uppercase tracking-widest flex items-center gap-2">
                 <span className="text-lg">⚠️</span> Pendências (Já Geradas)
@@ -1019,37 +1019,37 @@ export default function DiariasDashboard() {
             {tabelasPendentesArray.length === 0 && !mostrarTabelasPagas ? (
                <p className="text-xs text-slate-400 italic mb-2">Nenhuma tabela pendente no momento.</p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
                 {tabelasPendentesArray.map((tabela: any, idx: number) => (
-                  <div key={idx} className="bg-amber-50 border border-amber-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden">
+                  <div key={idx} className="bg-amber-50 border border-amber-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between relative">
                      <div className="absolute top-0 left-0 w-2 h-full bg-amber-400 rounded-l-2xl"></div>
                      
-                     {/* BOTÃO EXCLUIR ABSOLUTO PARA NÃO EMPURRAR O LAYOUT */}
-                     <button onClick={() => excluirRelatorioGerado(tabela.ids)} className="absolute top-4 right-4 text-amber-300 hover:text-red-500 transition-colors text-lg z-10 bg-amber-50 rounded-full" title="Desfazer/Excluir Tabela">🗑️</button>
-
-                     <div className="pl-3 sm:pl-4 pr-6 flex flex-col flex-1">
-                       <div className="flex flex-wrap items-center gap-2 mb-3">
-                         <span className="text-[8px] sm:text-[9px] font-black text-amber-800 uppercase bg-amber-100/80 px-2 py-1 rounded tracking-widest border border-amber-200">{tabela.metodo}</span>
-                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-100">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
+                     <div className="pl-4 pr-1 flex flex-col flex-1 w-full">
+                       <div className="flex justify-between items-start mb-3 gap-2">
+                         <div className="flex flex-col gap-1 items-start">
+                           <span className="text-[10px] font-black text-amber-800 uppercase bg-amber-100/80 px-2 py-1 rounded tracking-widest border border-amber-200">{tabela.metodo}</span>
+                           <span className="text-[10px] font-bold text-slate-500">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
+                         </div>
+                         <button onClick={() => excluirRelatorioGerado(tabela.ids)} className="text-amber-300 hover:text-red-500 transition-colors text-xl bg-white rounded-full p-1 shadow-sm shrink-0" title="Desfazer/Excluir Tabela">🗑️</button>
                        </div>
-                       <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                       <h3 className="text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                        <p className="text-[10px] font-medium text-amber-700">{tabela.ids.length} diárias na tabela</p>
                      </div>
-                     <div className="pl-3 sm:pl-4 mt-4 flex flex-col gap-2">
-                        <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="w-full bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 py-2.5 px-3 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm whitespace-normal text-center">
+                     <div className="pl-4 mt-4 flex flex-col gap-2.5 w-full">
+                        <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="w-full bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
                           📥 Refazer Download
                         </button>
                         {tabela.comprovante_url ? (
-                           <a href={tabela.comprovante_url} target="_blank" rel="noopener noreferrer" className="block w-full bg-slate-800 hover:bg-slate-900 text-white text-center py-2.5 px-3 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm whitespace-normal">
+                           <a href={tabela.comprovante_url} target="_blank" rel="noopener noreferrer" className="block w-full bg-slate-800 hover:bg-slate-900 text-white text-center py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
                              📄 Ver Cópia Salva
                            </a>
                         ) : (
-                           <label className="w-full bg-white border border-dashed border-amber-300 hover:border-amber-500 text-amber-700 py-2.5 px-3 rounded-xl text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center justify-center gap-1 text-center whitespace-normal">
+                           <label className="w-full bg-white border border-dashed border-amber-300 hover:border-amber-500 text-amber-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center justify-center gap-2 text-center">
                              {uploadingTabela === tabela.key ? '⏳ A enviar...' : '📤 Anexar Backup'}
                              <input type="file" className="hidden" accept=".xlsx, .xls, .pdf" disabled={uploadingTabela === tabela.key} onChange={(e) => handleUploadComprovante(e, tabela.ids, tabela.key)} />
                            </label>
                         )}
-                        <button onClick={() => marcarTabelaPaga(tabela.ids)} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 px-3 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1 whitespace-normal text-center">
+                        <button onClick={() => marcarTabelaPaga(tabela.ids)} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
                           ✓ Marcar Tabela Paga
                         </button>
                      </div>
@@ -1060,32 +1060,32 @@ export default function DiariasDashboard() {
 
             {/* --- QUADRO DE RESGATE DE TABELAS PAGAS --- */}
             {mostrarTabelasPagas && tabelasPagasArray.length > 0 && (
-              <div className="mt-8 pt-6 border-t border-slate-100 animate-slideDown">
+              <div className="mt-8 pt-6 border-t border-slate-100">
                 <h2 className="text-xs font-black text-green-600 uppercase tracking-widest mb-4 flex items-center gap-2">
                   <span className="text-lg">✅</span> Tabelas Concluídas (Pagas)
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 opacity-90 hover:opacity-100 transition-opacity">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full opacity-90 hover:opacity-100 transition-opacity">
                   {tabelasPagasArray.map((tabela: any, idx: number) => (
-                    <div key={idx} className="bg-green-50 border border-green-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden">
+                    <div key={idx} className="bg-green-50 border border-green-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between relative">
                        <div className="absolute top-0 left-0 w-2 h-full bg-green-500 rounded-l-2xl"></div>
-                       <div className="pl-3 sm:pl-4 flex flex-col flex-1">
-                         <div className="flex flex-wrap items-center gap-2 mb-3">
-                           <span className="text-[8px] sm:text-[9px] font-black text-green-800 uppercase bg-green-100 px-2 py-1 rounded tracking-widest border border-green-200">{tabela.metodo}</span>
-                           <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-100">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
+                       <div className="pl-4 pr-1 flex flex-col flex-1 w-full">
+                         <div className="flex flex-col gap-1 items-start mb-3">
+                           <span className="text-[10px] font-black text-green-800 uppercase bg-green-100 px-2 py-1 rounded tracking-widest border border-green-200">{tabela.metodo}</span>
+                           <span className="text-[10px] font-bold text-slate-500">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
                          </div>
-                         <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                         <h3 className="text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                          <p className="text-[10px] font-medium text-green-700">{tabela.ids.length} diárias na tabela</p>
                        </div>
-                       <div className="pl-3 sm:pl-4 mt-4 flex flex-col gap-2">
-                          <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="w-full bg-white border border-green-200 hover:bg-green-100 text-green-700 py-2.5 px-3 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm whitespace-normal text-center">
+                       <div className="pl-4 mt-4 flex flex-col gap-2.5 w-full">
+                          <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="w-full bg-white border border-green-200 hover:bg-green-100 text-green-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
                             📥 Refazer Download
                           </button>
                           {tabela.comprovante_url && (
-                             <a href={tabela.comprovante_url} target="_blank" rel="noopener noreferrer" className="block w-full bg-slate-800 hover:bg-slate-900 text-white text-center py-2.5 px-3 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm whitespace-normal">
+                             <a href={tabela.comprovante_url} target="_blank" rel="noopener noreferrer" className="block w-full bg-slate-800 hover:bg-slate-900 text-white text-center py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
                                📄 Ver Cópia Salva
                              </a>
                           )}
-                          <button onClick={() => desmarcarTabelaPaga(tabela.ids)} className="w-full bg-white border-2 border-green-300 hover:bg-green-100 text-green-700 font-black py-3 px-3 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1 whitespace-normal text-center">
+                          <button onClick={() => desmarcarTabelaPaga(tabela.ids)} className="w-full bg-white border-2 border-green-300 hover:bg-green-100 text-green-700 font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
                             ↩️ Desfazer Pagamento
                           </button>
                        </div>
@@ -1097,46 +1097,48 @@ export default function DiariasDashboard() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 w-full">
           
-          <aside className="lg:col-span-4">
+          <aside className="lg:col-span-4 relative">
             {/* --- AJUSTE FORMULÁRIO (COM SCROLL INTERNO BEM CALCULADO) --- */}
-            <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 lg:sticky lg:top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar flex flex-col">
+            <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 lg:sticky lg:top-24 flex flex-col h-[calc(100vh-6rem)]">
               <h2 className="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest shrink-0">Novo Registo</h2>
-              <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3 shrink-0">
-                <AutocompleteInput name="nome" placeholder="Nome do Servidor" value={formNome} onChange={(e: any) => { setFormNome(e.target.value); const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase()); if(serv && serv.cargo) setFormCargo(serv.cargo); }} sugestoes={sugestoesNomes} required />
-                {metodoSelecionado === 'CONTA SALARIO' && <AutocompleteInput name="cargo" placeholder="Cargo" value={formCargo} onChange={(e: any) => setFormCargo(e.target.value)} sugestoes={sugestoesCargos} />}
-                <input name="adolescente_nome" placeholder="Adolescente / Motivo" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
-                
-                <div className="grid grid-cols-2 gap-2">
-                  <input name="data" type="date" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
-                  <input name="valor" type="number" step="0.01" placeholder="R$ Valor" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
-                </div>
-                
-                {metodoSelecionado === 'CONTA SALARIO' && <input name="quantidade" type="number" placeholder="Qtd. Diárias" className="border-2 border-emerald-100 p-2.5 sm:p-3 rounded-xl bg-emerald-50 text-sm font-medium text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-500 w-full" />}
-                
-                <AutocompleteInput name="local" placeholder="Destino / Cidade" value={formLocal} onChange={(e: any) => setFormLocal(e.target.value)} sugestoes={sugestoesLocais} required />
-                
-                <select value={metodoSelecionado} onChange={(e) => setMetodoSelecionado(e.target.value)} className="border p-2.5 sm:p-3 rounded-xl bg-slate-100 text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-blue-500 w-full">
-                  <option value="SEI">SISTEMA SEI</option>
-                  <option value="CONTA SALARIO">CONTA SALÁRIO</option>
-                </select>
-                
-                {metodoSelecionado === 'SEI' && <input name="numero_processo" placeholder="Nº Processo SEI" className="border-2 border-blue-100 p-2.5 sm:p-3 rounded-xl bg-blue-50 text-sm font-bold text-blue-800 uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} />}
-                
-                <textarea name="observacoes" placeholder="Observações..." className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500 w-full" rows={2} />
-                
-                <div className="flex items-center gap-2 px-1 py-1">
-                  <input type="checkbox" id="manterDados" checked={manterDados} onChange={(e) => setManterDados(e.target.checked)} className="w-5 h-5 cursor-pointer accent-slate-900 rounded shrink-0" />
-                  <label htmlFor="manterDados" className="text-[10px] font-black text-slate-500 uppercase cursor-pointer select-none hover:text-slate-800 transition-colors">Manter dados p/ próxima diária</label>
-                </div>
-                
-                <button className="w-full bg-slate-900 text-white font-black py-3 rounded-xl uppercase text-xs shadow-lg hover:bg-black transition-all active:scale-95 mt-1 shrink-0">Salvar Diária</button>
-              </form>
+              <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
+                <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
+                  <AutocompleteInput name="nome" placeholder="Nome do Servidor" value={formNome} onChange={(e: any) => { setFormNome(e.target.value); const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase()); if(serv && serv.cargo) setFormCargo(serv.cargo); }} sugestoes={sugestoesNomes} required />
+                  {metodoSelecionado === 'CONTA SALARIO' && <AutocompleteInput name="cargo" placeholder="Cargo" value={formCargo} onChange={(e: any) => setFormCargo(e.target.value)} sugestoes={sugestoesCargos} />}
+                  <input name="adolescente_nome" placeholder="Adolescente / Motivo" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <input name="data" type="date" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
+                    <input name="valor" type="number" step="0.01" placeholder="R$ Valor" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
+                  </div>
+                  
+                  {metodoSelecionado === 'CONTA SALARIO' && <input name="quantidade" type="number" placeholder="Qtd. Diárias" className="border-2 border-emerald-100 p-2.5 sm:p-3 rounded-xl bg-emerald-50 text-sm font-medium text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-500 w-full" />}
+                  
+                  <AutocompleteInput name="local" placeholder="Destino / Cidade" value={formLocal} onChange={(e: any) => setFormLocal(e.target.value)} sugestoes={sugestoesLocais} required />
+                  
+                  <select value={metodoSelecionado} onChange={(e) => setMetodoSelecionado(e.target.value)} className="border p-2.5 sm:p-3 rounded-xl bg-slate-100 text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-blue-500 w-full">
+                    <option value="SEI">SISTEMA SEI</option>
+                    <option value="CONTA SALARIO">CONTA SALÁRIO</option>
+                  </select>
+                  
+                  {metodoSelecionado === 'SEI' && <input name="numero_processo" placeholder="Nº Processo SEI" className="border-2 border-blue-100 p-2.5 sm:p-3 rounded-xl bg-blue-50 text-sm font-bold text-blue-800 uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} />}
+                  
+                  <textarea name="observacoes" placeholder="Observações..." className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500 w-full" rows={2} />
+                  
+                  <div className="flex items-center gap-2 px-1 py-1">
+                    <input type="checkbox" id="manterDados" checked={manterDados} onChange={(e) => setManterDados(e.target.checked)} className="w-5 h-5 cursor-pointer accent-slate-900 rounded shrink-0" />
+                    <label htmlFor="manterDados" className="text-[10px] font-black text-slate-500 uppercase cursor-pointer select-none hover:text-slate-800 transition-colors">Manter dados p/ próxima diária</label>
+                  </div>
+                  
+                  <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-xs shadow-lg hover:bg-black transition-all active:scale-95 mt-1 shrink-0">Salvar Diária</button>
+                </form>
+              </div>
             </div>
           </aside>
 
-          <section className="lg:col-span-8">
+          <section className="lg:col-span-8 w-full">
             <div className="grid grid-cols-1 gap-4 w-full">
               {diariasFiltradas.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-10 sm:p-20 opacity-50"><div className="text-4xl mb-2">📭</div><p className="font-bold text-slate-400 text-sm text-center">Nenhum registo encontrado.</p></div>
@@ -1182,17 +1184,17 @@ export default function DiariasDashboard() {
                             
                             <div className="mt-3 pt-3 border-t border-slate-200 sm:border-slate-100 flex flex-wrap gap-2">
                                {item.recibo_url ? (
-                                 <a href={item.recibo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors whitespace-normal break-words">
+                                 <a href={item.recibo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors break-words">
                                    📄 Ver Recibo Anexado
                                  </a>
                                ) : (
-                                 <label className="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 cursor-pointer transition-colors whitespace-normal break-words">
+                                 <label className="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 cursor-pointer transition-colors break-words">
                                    {uploadingReciboId === item.id ? '⏳ A enviar...' : '📎 Anexar Recibo'}
                                    <input type="file" className="hidden" accept="image/*,.pdf" disabled={uploadingReciboId === item.id} onChange={(e) => handleUploadReciboIndividual(e, item.id)} />
                                  </label>
                                )}
 
-                               <button onClick={() => gerarReciboPDF(item)} className="text-[10px] font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 transition-colors whitespace-normal break-words">
+                               <button onClick={() => gerarReciboPDF(item)} className="text-[10px] font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 transition-colors break-words">
                                  🖨️ Imprimir Recibo
                                </button>
                             </div>
@@ -1210,7 +1212,7 @@ export default function DiariasDashboard() {
                           
                           {isAdmin && (
                             <div className="flex gap-2 mt-4 w-full sm:w-auto">
-                              <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 sm:flex-none px-3 py-3 sm:py-2.5 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm break-words whitespace-normal ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>{item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}</button>
+                              <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 sm:flex-none px-3 py-3 sm:py-2.5 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm break-words ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>{item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}</button>
                               <button onClick={() => iniciarEdicao(item)} className="bg-slate-100 sm:bg-white border-2 border-slate-100 px-4 py-3 sm:py-2.5 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors shrink-0">✏️</button>
                               <button onClick={() => excluirDiaria(item.id)} className="bg-slate-100 sm:bg-white border-2 border-slate-100 px-4 py-3 sm:py-2.5 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0">🗑️</button>
                             </div>
@@ -1227,7 +1229,7 @@ export default function DiariasDashboard() {
                 <div className="flex justify-center mt-6 mb-8">
                   <button 
                     onClick={() => setLimiteVisivel(prev => prev + 50)} 
-                    className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 font-black py-4 sm:py-3 px-8 rounded-2xl sm:rounded-xl text-[10px] sm:text-xs uppercase tracking-widest transition-colors shadow-sm active:scale-95 break-words whitespace-normal"
+                    className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 font-black py-4 sm:py-3 px-8 rounded-2xl sm:rounded-xl text-[10px] sm:text-xs uppercase tracking-widest transition-colors shadow-sm active:scale-95 break-words"
                   >
                     🔄 Mostrar mais antigas... ({diariasFiltradas.length - limiteVisivel} ocultas)
                   </button>
@@ -1260,14 +1262,12 @@ export default function DiariasDashboard() {
       )}
       
       <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes slideDown { 0% { transform: translate(-50%, -150%); opacity: 0; } 100% { transform: translate(-50%, 0); opacity: 1; } }
-        .animate-slideDown { animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
     </div>
   )
