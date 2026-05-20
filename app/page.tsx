@@ -85,7 +85,8 @@ export default function DiariasDashboard() {
 
   const abrirPainelLogs = async () => {
     setMostrarLogs(true);
-    const { data } = await supabase.from('logs').select('*').order('created_at', { ascending: false }).limit(50);
+    // Limite de 50 removido - Vai puxar todos os registos
+    const { data } = await supabase.from('logs').select('*').order('created_at', { ascending: false });
     if (data) setLogs(data);
   }
 
@@ -801,7 +802,7 @@ export default function DiariasDashboard() {
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
             <button onClick={() => setMostrarLogs(false)} className="absolute top-4 right-4 bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 w-8 h-8 rounded-full font-bold">X</button>
             <h2 className="text-xl font-black text-slate-800 mb-2 uppercase italic flex items-center gap-2">🕵️‍♂️ Auditoria (Histórico)</h2>
-            <p className="text-xs text-slate-500 mb-6">Registo das últimas 50 ações executadas no sistema.</p>
+            <p className="text-xs text-slate-500 mb-6">Registo de todas as ações executadas no sistema.</p>
             
             <div className="overflow-y-auto space-y-3 pr-2 custom-scrollbar flex-1">
               {logs.map(log => (
