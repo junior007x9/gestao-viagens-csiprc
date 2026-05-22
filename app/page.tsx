@@ -53,6 +53,10 @@ export default function DiariasDashboard() {
   const [servidores, setServidores] = useState<any[]>([]) 
   const [loading, setLoading] = useState(true)
   
+  // --- FEEDBACK VISUAL GLOBAL (TELA DE CARREGAMENTO) ---
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processMsg, setProcessMsg] = useState('Processando...');
+
   // --- SISTEMA DE NOTIFICAÇÕES (TOASTS) ---
   const [toast, setToast] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'info', id: number } | null>(null);
 
@@ -84,10 +88,14 @@ export default function DiariasDashboard() {
   }
 
   const abrirPainelLogs = async () => {
-    setMostrarLogs(true);
-    // Alterado para 1000 registos
-    const { data } = await supabase.from('logs').select('*').order('created_at', { ascending: false }).limit(1000);
-    if (data) setLogs(data);
+    setIsProcessing(true); setProcessMsg('A buscar histórico de auditoria...');
+    try {
+      setMostrarLogs(true);
+      const { data } = await supabase.from('logs').select('*').order('created_at', { ascending: false }).limit(1000);
+      if (data) setLogs(data);
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   const [emailInput, setEmailInput] = useState('')
@@ -275,19 +283,23 @@ export default function DiariasDashboard() {
     
     if (ids.length === 0) return mostrarToast("Não há valor para zerar.", "info");
 
-    const agora = new Date().toISOString();
-    
-    // Atualiza um a um para evitar bloqueio do banco em lotes
-    await Promise.all(ids.map(id => 
-      supabase.from('diarias').update({ 
-        data_ultima_exportacao: agora, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado 
-      }).eq('id', id)
-    ));
+    setIsProcessing(true); setProcessMsg(`A forçar baixa do método ${metodo}...`);
+    try {
+      const agora = new Date().toISOString();
+      
+      // Atualiza um a um para evitar bloqueio do banco em lotes
+      await Promise.all(ids.map(id => 
+        supabase.from('diarias').update({ 
+          data_ultima_exportacao: agora, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado 
+        }).eq('id', id)
+      ));
 
-    // Zera visualmente de imediato
-    setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora } : d));
-    await registrarLog('BAIXA FORÇADA', `Limpou o quadro A Gerar de ${metodo} (Forçou a baixa de ${ids.length} registos).`);
-    mostrarToast(`Limpeza efetuada! O valor foi zerado.`, "sucesso");
+      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora } : d));
+      await registrarLog('BAIXA FORÇADA', `Limpou o quadro A Gerar de ${metodo} (Forçou a baixa de ${ids.length} registos).`);
+      mostrarToast(`Limpeza efetuada! O valor foi zerado.`, "sucesso");
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   // --- FUNÇÃO PARA AGRUPAR TABELAS ---
@@ -304,11 +316,9 @@ export default function DiariasDashboard() {
     return Object.values(agrupado);
   }
 
-  // Pendentes ficam em cima (Crescente: paga primeiro as mais velhas)
   const tabelasPendentesArray = agruparTabelas(diarias.filter(d => d.data_ultima_exportacao && !d.pago))
     .sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
 
-  // Pagas ficam no Histórico (Decrescente: vê as que foram pagas mais recentemente)
   const tabelasPagasArray = agruparTabelas(diarias.filter(d => d.data_ultima_exportacao && d.pago))
     .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
@@ -377,6 +387,7 @@ export default function DiariasDashboard() {
 
   const lidarComLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsProcessing(true); setProcessMsg('A autenticar...');
     setMsgAuth({ texto: 'A autenticar...', tipo: 'info' });
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: emailInput, password: senhaInput });
@@ -385,6 +396,8 @@ export default function DiariasDashboard() {
       mostrarToast("Login efetuado com sucesso!", "sucesso");
     } catch (err: any) {
       setMsgAuth({ texto: 'E-mail ou senha incorretos.', tipo: 'erro' });
+    } finally {
+      setIsProcessing(false);
     }
   }
 
@@ -405,8 +418,8 @@ export default function DiariasDashboard() {
       return; 
     }
 
+    setIsProcessing(true); setProcessMsg('A gerar a Tabela no Excel...');
     listaPendentes.sort((a, b) => new Date(a.data_viagem).getTime() - new Date(b.data_viagem).getTime());
-    mostrarToast(`A gerar relatório Excel de ${metodo}...`, "info");
 
     try {
       const response = await fetch('/api/export-excel', {
@@ -425,12 +438,10 @@ export default function DiariasDashboard() {
            const agora = new Date().toISOString();
            
            if (metodo === 'CONTA SALARIO') {
-              // Dá baixa como gerada e PAGA imediatamente para "A Gerar" sumir e ir pro Histórico.
               await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, pago: true, data_pagamento: agora }).eq('id', id)));
               setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora } : d));
               mostrarToast("Transferência concluída! Diárias marcadas como geradas e pagas automaticamente.", "sucesso");
            } else {
-              // SEI vai para Pendências amarelas
               await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora }).eq('id', id)));
               setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora } : d));
               mostrarToast("Transferência concluída! Diárias enviadas para pendências.", "sucesso");
@@ -444,6 +455,8 @@ export default function DiariasDashboard() {
       }
     } catch (err) { 
       mostrarToast("Erro de ligação ao gerar Excel.", "erro"); 
+    } finally {
+      setIsProcessing(false);
     }
   }
 
@@ -452,7 +465,7 @@ export default function DiariasDashboard() {
     if (lista.length === 0) return;
     lista.sort((a, b) => new Date(a.data_viagem).getTime() - new Date(b.data_viagem).getTime());
     
-    mostrarToast("A refazer transferência do Excel...", "info");
+    setIsProcessing(true); setProcessMsg('A refazer transferência do Excel...');
 
     try {
       const response = await fetch('/api/export-excel', {
@@ -472,12 +485,15 @@ export default function DiariasDashboard() {
       }
     } catch (err) { 
       mostrarToast("Erro ao processar Excel antigo.", "erro"); 
+    } finally {
+      setIsProcessing(false);
     }
   }
 
   const excluirRelatorioGerado = async (ids: string[]) => {
     if (!isAdmin) return;
     if (confirm(`Tem a certeza que deseja desfazer esta tabela gerada? \nAs diárias voltarão para a fila de "A Gerar".`)) {
+      setIsProcessing(true); setProcessMsg('A desfazer a tabela de pagamento...');
       try {
         await Promise.all(ids.map(id => supabase.from('diarias').update({ data_ultima_exportacao: null, comprovante_url: null }).eq('id', id)));
         setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: null, comprovante_url: null } : d));
@@ -486,6 +502,8 @@ export default function DiariasDashboard() {
         mostrarToast("Tabela desfeita. Diárias retornaram para a fila.", "info");
       } catch (error) { 
         mostrarToast("Erro ao desfazer relatório.", "erro"); 
+      } finally {
+        setIsProcessing(false);
       }
     }
   }
@@ -494,7 +512,10 @@ export default function DiariasDashboard() {
     if (!isAdmin) return;
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploadingTabela(key); 
+    
+    setUploadingTabela(key);
+    setIsProcessing(true); setProcessMsg('A enviar o backup/comprovante...');
+    
     try {
        const extensao = file.name.split('.').pop();
        const fileName = `tabela_${key}_${Date.now()}.${extensao}`;
@@ -508,14 +529,18 @@ export default function DiariasDashboard() {
     } catch (err: any) { 
        mostrarToast("Erro ao enviar ficheiro: " + err.message, "erro"); 
     } finally { 
-       setUploadingTabela(null); 
+       setUploadingTabela(null);
+       setIsProcessing(false);
     }
   }
 
   const handleUploadReciboIndividual = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploadingReciboId(id); 
+    
+    setUploadingReciboId(id);
+    setIsProcessing(true); setProcessMsg('A enviar o recibo para a viagem...');
+    
     try {
        const extensao = file.name.split('.').pop();
        const fileName = `recibo_${id}_${Date.now()}.${extensao}`;
@@ -529,7 +554,8 @@ export default function DiariasDashboard() {
     } catch (err: any) { 
        mostrarToast("Erro ao anexar ficheiro: " + err.message, "erro"); 
     } finally { 
-       setUploadingReciboId(null); 
+       setUploadingReciboId(null);
+       setIsProcessing(false);
     }
   }
 
@@ -550,54 +576,79 @@ export default function DiariasDashboard() {
   }, [])
 
   useEffect(() => { 
-    if (estaAutenticado) { fetchDiarias(); fetchServidores(); }
+    if (estaAutenticado) { 
+      // Mostra tela de carregamento na entrada inicial
+      setIsProcessing(true); setProcessMsg('A carregar sistema...');
+      Promise.all([fetchDiarias(), fetchServidores()]).finally(() => setIsProcessing(false));
+    }
   }, [estaAutenticado, fetchDiarias, fetchServidores])
 
   async function adicionarServidor(e: React.FormEvent) {
     e.preventDefault()
     if(!isAdmin || !novoServidor.nome) return;
-    const { error } = await supabase.from('servidores').insert([{ nome: novoServidor.nome.toUpperCase(), cargo: novoServidor.cargo.toUpperCase() }])
-    if (error) { 
-      mostrarToast("Erro ao adicionar servidor.", "erro"); 
-    } else { 
-      await registrarLog('GERENCIAMENTO', `Adicionou o servidor ${novoServidor.nome.toUpperCase()} à equipa.`);
-      setNovoServidor({ nome: '', cargo: '' }); 
-      fetchServidores(); 
-      mostrarToast("Membro da equipa adicionado!", "sucesso");
+    
+    setIsProcessing(true); setProcessMsg('A registar novo membro da equipa...');
+    try {
+      const { error } = await supabase.from('servidores').insert([{ nome: novoServidor.nome.toUpperCase(), cargo: novoServidor.cargo.toUpperCase() }])
+      if (error) { 
+        mostrarToast("Erro ao adicionar servidor.", "erro"); 
+      } else { 
+        await registrarLog('GERENCIAMENTO', `Adicionou o servidor ${novoServidor.nome.toUpperCase()} à equipa.`);
+        setNovoServidor({ nome: '', cargo: '' }); 
+        fetchServidores(); 
+        mostrarToast("Membro da equipa adicionado!", "sucesso");
+      }
+    } finally {
+      setIsProcessing(false);
     }
   }
 
   async function removerServidor(id: number) {
     if(!isAdmin) return;
     if(confirm("Remover este membro da equipa permanentemente?")) { 
-      await supabase.from('servidores').delete().eq('id', id); 
-      await registrarLog('GERENCIAMENTO', `Removeu um servidor da lista de equipa.`);
-      fetchServidores(); 
-      mostrarToast("Membro removido da equipa.", "info");
+      setIsProcessing(true); setProcessMsg('A remover membro...');
+      try {
+        await supabase.from('servidores').delete().eq('id', id); 
+        await registrarLog('GERENCIAMENTO', `Removeu um servidor da lista de equipa.`);
+        fetchServidores(); 
+        mostrarToast("Membro removido da equipa.", "info");
+      } finally {
+        setIsProcessing(false);
+      }
     }
   }
 
   async function marcarTabelaPaga(ids: string[]) {
     if (!isAdmin) return;
     if (confirm(`Confirmar o pagamento desta tabela de uma só vez? \nEla sairá das Pendências e irá para o Histórico de Pagas.`)) {
-      const agora = new Date().toISOString();
-      await Promise.all(ids.map(id => supabase.from('diarias').update({ pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
-      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
-      await registrarLog('PAGAMENTO EM LOTE', `Marcou uma tabela inteira (${ids.length} viagens) como PAGA.`);
-      fetchDiarias();
-      mostrarToast(`Tabela marcada como PAGA!`, "sucesso");
+      setIsProcessing(true); setProcessMsg('A processar e arquivar tabela como Paga...');
+      try {
+        const agora = new Date().toISOString();
+        await Promise.all(ids.map(id => supabase.from('diarias').update({ pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
+        setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
+        await registrarLog('PAGAMENTO EM LOTE', `Marcou uma tabela inteira (${ids.length} viagens) como PAGA.`);
+        fetchDiarias();
+        mostrarToast(`Tabela marcada como PAGA!`, "sucesso");
+      } finally {
+        setIsProcessing(false);
+      }
     }
   }
 
   async function desmarcarTabelaPaga(ids: string[]) {
     if (!isAdmin) return;
     if (confirm(`Desfazer o pagamento desta tabela? \nAs ${ids.length} diárias voltarão para as Pendências (quadro amarelo).`)) {
-      const agora = new Date().toISOString();
-      await Promise.all(ids.map(id => supabase.from('diarias').update({ pago: false, data_pagamento: null, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
-      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, pago: false, data_pagamento: null, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
-      await registrarLog('ESTORNO DE PAGAMENTO', `Desmarcou uma tabela inteira (${ids.length} viagens) que estava PAGA.`);
-      fetchDiarias();
-      mostrarToast(`Pagamento desfeito! A tabela voltou para as pendências.`, "info");
+      setIsProcessing(true); setProcessMsg('A estornar pagamento para os pendentes...');
+      try {
+        const agora = new Date().toISOString();
+        await Promise.all(ids.map(id => supabase.from('diarias').update({ pago: false, data_pagamento: null, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
+        setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, pago: false, data_pagamento: null, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
+        await registrarLog('ESTORNO DE PAGAMENTO', `Desmarcou uma tabela inteira (${ids.length} viagens) que estava PAGA.`);
+        fetchDiarias();
+        mostrarToast(`Pagamento desfeito! A tabela voltou para as pendências.`, "info");
+      } finally {
+        setIsProcessing(false);
+      }
     }
   }
 
@@ -620,7 +671,6 @@ export default function DiariasDashboard() {
     if (ordemData === 'DESC') return dataB - dataA; else return dataA - dataB;
   })
 
-  // Gráficos usam apenas data e pesquisa
   const diariasParaGraficos = diarias.filter(d => {
     const busca = ((d.nome || "") + (d.adolescente_nome || "") + (d.numero_processo || "") + (d.local_viagem || "")).toLowerCase()
     const matchesPesquisa = busca.includes(pesquisa.toLowerCase())
@@ -646,17 +696,24 @@ export default function DiariasDashboard() {
 
   const salvarEdicao = async () => {
     if(!isAdmin) return;
-    const agora = new Date().toISOString();
-    const valorFormatado = dadosEditados.valor ? parseFloat(parseFloat(dadosEditados.valor.toString()).toFixed(2)) : 0;
-    const dadosFinais = { ...dadosEditados, valor: valorFormatado, updated_at: agora, usuario_alteracao: usuarioLogado };
-    const { error } = await supabase.from('diarias').update(dadosFinais).eq('id', idEditando)
-    if (!error) { 
-      setIdEditando(null); 
-      fetchDiarias(); 
-      await registrarLog('EDIÇÃO', `Atualizou os dados da viagem de ${dadosFinais.nome}.`);
-      mostrarToast("Registo atualizado com sucesso!", "sucesso");
-    } else { 
-      mostrarToast("Erro ao salvar edição: " + error.message, "erro"); 
+    setIsProcessing(true); setProcessMsg('A salvar as alterações da viagem...');
+    
+    try {
+      const agora = new Date().toISOString();
+      const valorFormatado = dadosEditados.valor ? parseFloat(parseFloat(dadosEditados.valor.toString()).toFixed(2)) : 0;
+      const dadosFinais = { ...dadosEditados, valor: valorFormatado, updated_at: agora, usuario_alteracao: usuarioLogado };
+      const { error } = await supabase.from('diarias').update(dadosFinais).eq('id', idEditando)
+      
+      if (!error) { 
+        setIdEditando(null); 
+        fetchDiarias(); 
+        await registrarLog('EDIÇÃO', `Atualizou os dados da viagem de ${dadosFinais.nome}.`);
+        mostrarToast("Registo atualizado com sucesso!", "sucesso");
+      } else { 
+        mostrarToast("Erro ao salvar edição: " + error.message, "erro"); 
+      }
+    } finally {
+      setIsProcessing(false);
     }
   }
 
@@ -667,26 +724,55 @@ export default function DiariasDashboard() {
     const cargoFinal = formCargo || (formData.get('cargo') as string)
     const localFinal = formLocal || (formData.get('local') as string)
     const adolescenteFinal = formData.get('adolescente_nome') as string
+    const dataFinal = formData.get('data') as string
 
-    const valorBruto = parseFloat(formData.get('valor') as string) || 0;
-    const valorCorrigido = parseFloat(valorBruto.toFixed(2));
+    // --- TRAVA DE SEGURANÇA: VERIFICAR DUPLICIDADE ---
+    const diariaDuplicada = diarias.find(d => 
+      d.nome === nomeFinal.toUpperCase() &&
+      d.data_viagem === dataFinal &&
+      d.local_viagem === localFinal.toUpperCase() &&
+      d.metodo_pagamento === metodoSelecionado
+    );
 
-    const novaDiaria = {
-      nome: nomeFinal.toUpperCase(),
-      cargo: cargoFinal.toUpperCase(),
-      adolescente_nome: adolescenteFinal.toUpperCase(),
-      data_viagem: formData.get('data'),
-      local_viagem: localFinal.toUpperCase(),
-      valor: valorCorrigido,
-      quantidade: formData.get('quantidade') ? parseInt(formData.get('quantidade') as string) : 1,
-      metodo_pagamento: metodoSelecionado,
-      numero_processo: formData.get('numero_processo') || "",
-      observacoes: formData.get('observacoes') || "",
-      pago: false,
-      usuario_alteracao: usuarioLogado
+    if (diariaDuplicada) {
+      const confirmarDuplicidade = window.confirm(
+        `⚠️ ATENÇÃO: POSSÍVEL DUPLICIDADE DETECTADA!\n\n` +
+        `O sistema identificou que já existe uma diária cadastrada com estes dados:\n` +
+        `- Servidor: ${nomeFinal.toUpperCase()}\n` +
+        `- Data: ${formatarDataBR(dataFinal)}\n` +
+        `- Destino: ${localFinal.toUpperCase()}\n` +
+        `- Método: ${metodoSelecionado}\n\n` +
+        `Deseja ignorar este aviso e cadastrar mesmo assim? (Clique em "Cancelar" para abortar)`
+      );
+      
+      if (!confirmarDuplicidade) {
+        mostrarToast("Cadastro abortado para evitar duplicidade.", "info");
+        return; 
+      }
     }
+    // ------------------------------------------------------
+
+    setIsProcessing(true); setProcessMsg('A registar a nova viagem...');
 
     try {
+      const valorBruto = parseFloat(formData.get('valor') as string) || 0;
+      const valorCorrigido = parseFloat(valorBruto.toFixed(2));
+
+      const novaDiaria = {
+        nome: nomeFinal.toUpperCase(),
+        cargo: cargoFinal.toUpperCase(),
+        adolescente_nome: adolescenteFinal.toUpperCase(),
+        data_viagem: dataFinal,
+        local_viagem: localFinal.toUpperCase(),
+        valor: valorCorrigido,
+        quantidade: formData.get('quantidade') ? parseInt(formData.get('quantidade') as string) : 1,
+        metodo_pagamento: metodoSelecionado,
+        numero_processo: formData.get('numero_processo') || "",
+        observacoes: formData.get('observacoes') || "",
+        pago: false,
+        usuario_alteracao: usuarioLogado
+      }
+
       const { error } = await supabase.from('diarias').insert([novaDiaria])
       if (error) { mostrarToast("Erro na base de dados: " + error.message, "erro"); return; }
       
@@ -700,30 +786,44 @@ export default function DiariasDashboard() {
         form.reset(); setFormNome(""); setFormCargo(""); setFormLocal(""); 
         mostrarToast("Nova diária cadastrada com sucesso!", "sucesso");
       }
-    } catch (err) { mostrarToast("Erro inesperado ao salvar.", "erro"); }
+    } catch (err) { 
+      mostrarToast("Erro inesperado ao salvar.", "erro"); 
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   async function alternarPagamento(id: string, statusAtual: boolean) {
     if(!isAdmin) return;
-    const agora = new Date().toISOString()
-    await supabase.from('diarias').update({ pago: !statusAtual, data_pagamento: !statusAtual ? agora : null, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)
     
-    // Atualização Otimista
-    setDiarias(prev => prev.map(d => d.id === id ? { ...d, pago: !statusAtual, data_pagamento: !statusAtual ? agora : null, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
-    
-    await registrarLog('STATUS', `Marcou uma diária como ${!statusAtual ? 'PAGA' : 'PENDENTE'}.`);
-    fetchDiarias()
-    if(!statusAtual) mostrarToast("Diária marcada como PAGA!", "sucesso");
-    else mostrarToast("Pagamento desmarcado (Pendente).", "info");
+    setIsProcessing(true); setProcessMsg('A alterar estado da viagem...');
+    try {
+      const agora = new Date().toISOString()
+      await supabase.from('diarias').update({ pago: !statusAtual, data_pagamento: !statusAtual ? agora : null, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)
+      
+      setDiarias(prev => prev.map(d => d.id === id ? { ...d, pago: !statusAtual, data_pagamento: !statusAtual ? agora : null, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
+      
+      await registrarLog('STATUS', `Marcou uma diária como ${!statusAtual ? 'PAGA' : 'PENDENTE'}.`);
+      fetchDiarias()
+      if(!statusAtual) mostrarToast("Diária marcada como PAGA!", "sucesso");
+      else mostrarToast("Pagamento desmarcado (Pendente).", "info");
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   async function excluirDiaria(id: string) {
     if(!isAdmin) return;
     if (confirm("Excluir este registo permanentemente?")) { 
-      await supabase.from('diarias').delete().eq('id', id); 
-      await registrarLog('EXCLUSÃO', `Removeu definitivamente um registo do sistema.`);
-      fetchDiarias(); 
-      mostrarToast("Registo excluído.", "info");
+      setIsProcessing(true); setProcessMsg('A excluir o registo definitivamente...');
+      try {
+        await supabase.from('diarias').delete().eq('id', id); 
+        await registrarLog('EXCLUSÃO', `Removeu definitivamente um registo do sistema.`);
+        fetchDiarias(); 
+        mostrarToast("Registo excluído.", "info");
+      } finally {
+        setIsProcessing(false);
+      }
     }
   }
 
@@ -752,6 +852,16 @@ export default function DiariasDashboard() {
   if (!estaAutenticado) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 to-slate-900 p-4 relative overflow-hidden">
+        
+        {isProcessing && (
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-pulse">
+              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <p className="font-black text-slate-800 uppercase tracking-widest text-xs">{processMsg}</p>
+            </div>
+          </div>
+        )}
+
         {toast && (
           <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm text-white flex items-center gap-3 animate-slideDown ${
             toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'
@@ -770,7 +880,7 @@ export default function DiariasDashboard() {
             <input type="email" placeholder="E-MAIL" className="input-login" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} required />
             <input type="password" placeholder="SENHA" className="input-login" value={senhaInput} onChange={(e) => setSenhaInput(e.target.value)} required />
             {msgAuth.texto && <p className={`text-xs font-bold text-center mt-1 animate-pulse ${msgAuth.tipo === 'erro' ? 'text-red-500' : 'text-green-600'}`}>{msgAuth.texto}</p>}
-            <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-xl uppercase text-xs tracking-widest mt-2">ENTRAR</button>
+            <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-xl uppercase text-xs tracking-widest mt-2" disabled={isProcessing}>ENTRAR</button>
           </form>
         </div>
         <style jsx>{`
@@ -779,6 +889,8 @@ export default function DiariasDashboard() {
           .input-login:focus { border-color: #2563eb; background-color: #ffffff; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
           @keyframes slideDown { 0% { transform: translate(-50%, -150%); opacity: 0; } 100% { transform: translate(-50%, 0); opacity: 1; } }
           .animate-slideDown { animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+          @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+          .animate-fadeIn { animation: fadeIn 0.3s ease forwards; }
         `}</style>
       </div>
     )
@@ -787,6 +899,16 @@ export default function DiariasDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-28 relative">
       
+      {/* TELA DE CARREGAMENTO GLOBAL (OVERLAY) */}
+      {isProcessing && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-pulse">
+            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="font-black text-slate-800 uppercase tracking-widest text-xs text-center">{processMsg}</p>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-3 sm:px-6 sm:py-4 rounded-2xl shadow-2xl font-bold text-xs sm:text-sm text-white flex items-center gap-3 animate-slideDown w-11/12 max-w-md ${
           toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'
@@ -1269,6 +1391,10 @@ export default function DiariasDashboard() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Novas animações para a tela de loading */
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+        .animate-fadeIn { animation: fadeIn 0.2s ease forwards; }
       `}</style>
     </div>
   )
