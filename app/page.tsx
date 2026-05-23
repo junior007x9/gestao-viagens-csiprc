@@ -577,7 +577,6 @@ export default function DiariasDashboard() {
 
   useEffect(() => { 
     if (estaAutenticado) { 
-      // Mostra tela de carregamento na entrada inicial
       setIsProcessing(true); setProcessMsg('A carregar sistema...');
       Promise.all([fetchDiarias(), fetchServidores()]).finally(() => setIsProcessing(false));
     }
@@ -1255,7 +1254,7 @@ export default function DiariasDashboard() {
                     <label htmlFor="manterDados" className="text-[10px] font-black text-slate-500 uppercase cursor-pointer select-none hover:text-slate-800 transition-colors">Manter dados p/ próxima diária</label>
                   </div>
                   
-                  <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-xs shadow-lg hover:bg-black transition-all active:scale-95 mt-1 shrink-0">Salvar Diária</button>
+                  <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-xs shadow-lg hover:bg-black transition-all active:scale-95 mt-1 shrink-0" disabled={isProcessing}>Salvar Diária</button>
                 </form>
               </div>
             </div>
@@ -1269,21 +1268,37 @@ export default function DiariasDashboard() {
                 /* --- LIMITANDO A RENDERIZAÇÃO PARA PAGINAÇÃO --- */
                 diariasFiltradas.slice(0, limiteVisivel).map((item) => (
                   <div key={item.id} className={`bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] transition-all duration-300 ${item.pago ? 'border-green-500 bg-slate-50 opacity-90 hover:opacity-100' : 'border-red-500 shadow-md transform hover:-translate-y-1'}`}>
+                    
+                    {/* --- FORMULÁRIO DE EDIÇÃO COMPLETO --- */}
                     {idEditando === item.id ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative">
-                        <div className="col-span-1 sm:col-span-2 text-[10px] font-black text-blue-600 mb-2 italic">A EDITAR REGISTO</div>
-                        <input value={dadosEditados.nome || ""} onChange={e => setDadosEditados({...dadosEditados, nome: e.target.value.toUpperCase()})} className="border p-2.5 sm:p-3 rounded-lg text-sm uppercase w-full" placeholder="Nome" />
-                        <input value={dadosEditados.adolescente_nome || ""} onChange={e => setDadosEditados({...dadosEditados, adolescente_nome: e.target.value.toUpperCase()})} className="border p-2.5 sm:p-3 rounded-lg text-sm uppercase w-full" placeholder="Adolescente" />
-                        <input type="date" value={dadosEditados.data_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, data_viagem: e.target.value})} className="border p-2.5 sm:p-3 rounded-lg text-sm w-full" />
-                        <input value={dadosEditados.local_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, local_viagem: e.target.value.toUpperCase()})} className="border p-2.5 sm:p-3 rounded-lg text-sm uppercase w-full" placeholder="Destino" />
-                        <input value={dadosEditados.numero_processo || ""} onChange={e => setDadosEditados({...dadosEditados, numero_processo: e.target.value.toUpperCase()})} className="border p-2.5 sm:p-3 rounded-lg text-sm uppercase w-full" placeholder="Processo" />
-                        <input type="number" value={dadosEditados.valor || ""} onChange={e => setDadosEditados({...dadosEditados, valor: e.target.value})} className="border p-2.5 sm:p-3 rounded-lg text-sm w-full" placeholder="Valor" />
-                        <input value={dadosEditados.cargo || ""} onChange={e => setDadosEditados({...dadosEditados, cargo: e.target.value.toUpperCase()})} className="border p-2.5 sm:p-3 rounded-lg text-sm uppercase w-full" placeholder="Cargo" />
-                        <input value={dadosEditados.quantidade || ""} onChange={e => setDadosEditados({...dadosEditados, quantidade: e.target.value})} className="border p-2.5 sm:p-3 rounded-lg text-sm w-full" placeholder="Qtd" />
-                        <textarea value={dadosEditados.observacoes || ""} onChange={e => setDadosEditados({...dadosEditados, observacoes: e.target.value})} className="col-span-1 sm:col-span-2 border p-2.5 sm:p-3 rounded-lg text-sm w-full" placeholder="Observações" />
-                        <div className="col-span-1 sm:col-span-2 flex flex-col sm:flex-row gap-2 mt-2">
-                          <button onClick={salvarEdicao} className="w-full sm:w-auto flex-1 bg-green-600 text-white p-3 rounded-xl font-bold uppercase text-[10px]">Salvar Alterações</button>
-                          <button onClick={() => setIdEditando(null)} className="w-full sm:w-auto flex-1 bg-slate-200 text-slate-600 p-3 rounded-xl font-bold uppercase text-[10px]">Cancelar</button>
+                      <div className="bg-blue-50 p-4 sm:p-6 rounded-2xl border-2 border-blue-200 shadow-xl space-y-4 relative">
+                        <h3 className="font-black text-blue-800 uppercase italic mb-2 text-sm text-center sm:text-left">✏️ Editando Registo</h3>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.nome || ""} onChange={e => setDadosEditados({...dadosEditados, nome: e.target.value.toUpperCase()})} placeholder="Nome do Servidor" />
+                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.adolescente_nome || ""} onChange={e => setDadosEditados({...dadosEditados, adolescente_nome: e.target.value.toUpperCase()})} placeholder="Adolescente / Motivo" />
+                           
+                           <input type="date" className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.data_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, data_viagem: e.target.value})} />
+                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.local_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, local_viagem: e.target.value.toUpperCase()})} placeholder="Destino / Cidade" />
+                           
+                           <select className="border p-2.5 sm:p-3 rounded-lg text-sm w-full font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.metodo_pagamento || "SEI"} onChange={e => setDadosEditados({...dadosEditados, metodo_pagamento: e.target.value})}>
+                             <option value="SEI">SISTEMA SEI</option>
+                             <option value="CONTA SALARIO">CONTA SALÁRIO</option>
+                           </select>
+                           
+                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.numero_processo || ""} onChange={e => setDadosEditados({...dadosEditados, numero_processo: e.target.value.toUpperCase()})} placeholder="Nº Processo SEI" />
+                           
+                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.valor || ""} type="number" step="0.01" onChange={e => setDadosEditados({...dadosEditados, valor: e.target.value})} placeholder="Valor (R$)" />
+                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.cargo || ""} onChange={e => setDadosEditados({...dadosEditados, cargo: e.target.value.toUpperCase()})} placeholder="Cargo" />
+                           
+                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.quantidade || ""} type="number" onChange={e => setDadosEditados({...dadosEditados, quantidade: e.target.value})} placeholder="Qtd. Diárias" />
+                           
+                           <textarea className="col-span-1 sm:col-span-2 border p-2.5 sm:p-3 rounded-lg text-sm w-full resize-none outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.observacoes || ""} onChange={e => setDadosEditados({...dadosEditados, observacoes: e.target.value})} placeholder="Observações..." rows={2} />
+                        </div>
+                        
+                        <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                           <button onClick={salvarEdicao} className="w-full sm:w-auto flex-1 bg-green-600 hover:bg-green-700 text-white p-3.5 rounded-xl font-black uppercase text-[10px] shadow-md transition-colors" disabled={isProcessing}>💾 Salvar Alterações</button>
+                           <button onClick={() => setIdEditando(null)} className="w-full sm:w-auto flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 p-3.5 rounded-xl font-black uppercase text-[10px] transition-colors" disabled={isProcessing}>❌ Cancelar</button>
                         </div>
                       </div>
                     ) : (
