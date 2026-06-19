@@ -294,7 +294,7 @@ export default function DiariasDashboard() {
         }).eq('id', id)
       ));
 
-      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
+      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora } : d));
       await registrarLog('BAIXA FORÇADA', `Limpou o quadro A Gerar de ${metodo} (Forçou a baixa de ${ids.length} registos).`);
       mostrarToast(`Limpeza efetuada! O valor foi zerado.`, "sucesso");
     } finally {
@@ -438,12 +438,12 @@ export default function DiariasDashboard() {
            const agora = new Date().toISOString();
            
            if (metodo === 'CONTA SALARIO') {
-              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, pago: true, data_pagamento: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
-              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora, usuario_alteracao: usuarioLogado } : d));
+              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, pago: true, data_pagamento: agora }).eq('id', id)));
+              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora } : d));
               mostrarToast("Transferência concluída! Diárias marcadas como geradas e pagas automaticamente.", "sucesso");
            } else {
-              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
-              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado } : d));
+              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora }).eq('id', id)));
+              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora } : d));
               mostrarToast("Transferência concluída! Diárias enviadas para pendências.", "sucesso");
            }
            
@@ -495,8 +495,8 @@ export default function DiariasDashboard() {
     if (confirm(`Tem a certeza que deseja desfazer esta tabela gerada? \nAs diárias voltarão para a fila de "A Gerar".`)) {
       setIsProcessing(true); setProcessMsg('A desfazer a tabela de pagamento...');
       try {
-        await Promise.all(ids.map(id => supabase.from('diarias').update({ data_ultima_exportacao: null, comprovante_url: null, usuario_alteracao: usuarioLogado }).eq('id', id)));
-        setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: null, comprovante_url: null, usuario_alteracao: usuarioLogado } : d));
+        await Promise.all(ids.map(id => supabase.from('diarias').update({ data_ultima_exportacao: null, comprovante_url: null }).eq('id', id)));
+        setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: null, comprovante_url: null } : d));
         fetchDiarias();
         await registrarLog('ESTORNO DE TABELA', `Desfez uma tabela exportada. ${ids.length} diárias retornaram para A Gerar.`);
         mostrarToast("Tabela desfeita. Diárias retornaram para a fila.", "info");
@@ -522,7 +522,7 @@ export default function DiariasDashboard() {
        const { error: uploadError } = await supabase.storage.from('comprovantes').upload(fileName, file);
        if (uploadError) throw uploadError;
        const { data: urlData } = supabase.storage.from('comprovantes').getPublicUrl(fileName);
-       await Promise.all(ids.map(id => supabase.from('diarias').update({ comprovante_url: urlData.publicUrl, usuario_alteracao: usuarioLogado }).eq('id', id)));
+       await Promise.all(ids.map(id => supabase.from('diarias').update({ comprovante_url: urlData.publicUrl }).eq('id', id)));
        await registrarLog('UPLOAD DE BACKUP', `Anexou um comprovativo de segurança para a tabela ${key}.`);
        mostrarToast("Cópia de segurança (Backup) anexada com sucesso!", "sucesso");
        fetchDiarias();
@@ -547,7 +547,7 @@ export default function DiariasDashboard() {
        const { error: uploadError } = await supabase.storage.from('comprovantes').upload(fileName, file);
        if (uploadError) throw uploadError;
        const { data: urlData } = supabase.storage.from('comprovantes').getPublicUrl(fileName);
-       await supabase.from('diarias').update({ recibo_url: urlData.publicUrl, usuario_alteracao: usuarioLogado }).eq('id', id);
+       await supabase.from('diarias').update({ recibo_url: urlData.publicUrl }).eq('id', id);
        await registrarLog('ANEXO INDIVIDUAL', `Anexou um recibo/foto para uma viagem individual.`);
        mostrarToast("Recibo anexado com sucesso!", "sucesso");
        fetchDiarias();
@@ -757,7 +757,6 @@ export default function DiariasDashboard() {
       const valorBruto = parseFloat(formData.get('valor') as string) || 0;
       const valorCorrigido = parseFloat(valorBruto.toFixed(2));
 
-      // MUDANÇA AQUI: Adicionado usuario_cadastro
       const novaDiaria = {
         nome: nomeFinal.toUpperCase(),
         cargo: cargoFinal.toUpperCase(),
@@ -770,7 +769,6 @@ export default function DiariasDashboard() {
         numero_processo: formData.get('numero_processo') || "",
         observacoes: formData.get('observacoes') || "",
         pago: false,
-        usuario_cadastro: usuarioLogado, 
         usuario_alteracao: usuarioLogado
       }
 
@@ -1344,32 +1342,10 @@ export default function DiariasDashboard() {
                         <div className="sm:text-right flex flex-col justify-between items-start sm:items-end border-t sm:border-t-0 pt-4 sm:pt-0 mt-2 sm:mt-0 shrink-0">
                           <div className="text-left sm:text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end">
                              <p className="font-black text-slate-900 text-xl sm:text-2xl break-words">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
-                             
-                             {/* MUDANÇA AQUI: Renderizando QUEM CADASTROU E QUEM EDITOU claramente */}
-                             <div className="text-[8px] sm:text-[9px] text-slate-400 sm:mt-2 space-y-1 text-right flex flex-col items-end">
-                               {item.created_at && (
-                                 <p className="flex items-center justify-end gap-1 flex-wrap">
-                                   ➕ {new Date(item.created_at).toLocaleDateString('pt-BR')} 
-                                   {item.usuario_cadastro && (
-                                     <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold break-words border border-slate-200">
-                                       Criado por: {item.usuario_cadastro}
-                                     </span>
-                                   )}
-                                 </p>
-                               )}
-                               
-                               {item.updated_at && (
-                                 <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1 flex-wrap mt-1">
-                                   ✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}
-                                   {item.usuario_alteracao && item.usuario_alteracao !== item.usuario_cadastro && (
-                                     <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold break-words border border-amber-200">
-                                       Editado por: {item.usuario_alteracao}
-                                     </span>
-                                   )}
-                                 </p>
-                               )}
+                             <div className="text-[8px] sm:text-[9px] text-slate-400 sm:mt-2 space-y-0.5 text-right">
+                               {item.created_at && <p className="flex items-center justify-end gap-1">➕ {new Date(item.created_at).toLocaleDateString('pt-BR')} <span className="bg-slate-100 text-slate-500 px-1 rounded font-bold hidden sm:inline-block break-words">{item.usuario_alteracao ? `por ${item.usuario_alteracao}` : ''}</span></p>}
+                               {item.updated_at && <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1">✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}</p>}
                              </div>
-
                           </div>
                           
                           {isAdmin && (
