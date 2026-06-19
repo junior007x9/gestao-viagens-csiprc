@@ -287,14 +287,13 @@ export default function DiariasDashboard() {
     try {
       const agora = new Date().toISOString();
       
-      // Atualiza um a um para evitar bloqueio do banco em lotes
       await Promise.all(ids.map(id => 
         supabase.from('diarias').update({ 
           data_ultima_exportacao: agora, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado 
         }).eq('id', id)
       ));
 
-      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora } : d));
+      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
       await registrarLog('BAIXA FORÇADA', `Limpou o quadro A Gerar de ${metodo} (Forçou a baixa de ${ids.length} registos).`);
       mostrarToast(`Limpeza efetuada! O valor foi zerado.`, "sucesso");
     } finally {
@@ -438,12 +437,12 @@ export default function DiariasDashboard() {
            const agora = new Date().toISOString();
            
            if (metodo === 'CONTA SALARIO') {
-              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, pago: true, data_pagamento: agora }).eq('id', id)));
-              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora } : d));
+              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, pago: true, data_pagamento: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
+              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora, usuario_alteracao: usuarioLogado } : d));
               mostrarToast("Transferência concluída! Diárias marcadas como geradas e pagas automaticamente.", "sucesso");
            } else {
-              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora }).eq('id', id)));
-              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora } : d));
+              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
+              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado } : d));
               mostrarToast("Transferência concluída! Diárias enviadas para pendências.", "sucesso");
            }
            
@@ -495,8 +494,8 @@ export default function DiariasDashboard() {
     if (confirm(`Tem a certeza que deseja desfazer esta tabela gerada? \nAs diárias voltarão para a fila de "A Gerar".`)) {
       setIsProcessing(true); setProcessMsg('A desfazer a tabela de pagamento...');
       try {
-        await Promise.all(ids.map(id => supabase.from('diarias').update({ data_ultima_exportacao: null, comprovante_url: null }).eq('id', id)));
-        setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: null, comprovante_url: null } : d));
+        await Promise.all(ids.map(id => supabase.from('diarias').update({ data_ultima_exportacao: null, comprovante_url: null, usuario_alteracao: usuarioLogado }).eq('id', id)));
+        setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: null, comprovante_url: null, usuario_alteracao: usuarioLogado } : d));
         fetchDiarias();
         await registrarLog('ESTORNO DE TABELA', `Desfez uma tabela exportada. ${ids.length} diárias retornaram para A Gerar.`);
         mostrarToast("Tabela desfeita. Diárias retornaram para a fila.", "info");
@@ -522,7 +521,7 @@ export default function DiariasDashboard() {
        const { error: uploadError } = await supabase.storage.from('comprovantes').upload(fileName, file);
        if (uploadError) throw uploadError;
        const { data: urlData } = supabase.storage.from('comprovantes').getPublicUrl(fileName);
-       await Promise.all(ids.map(id => supabase.from('diarias').update({ comprovante_url: urlData.publicUrl }).eq('id', id)));
+       await Promise.all(ids.map(id => supabase.from('diarias').update({ comprovante_url: urlData.publicUrl, usuario_alteracao: usuarioLogado }).eq('id', id)));
        await registrarLog('UPLOAD DE BACKUP', `Anexou um comprovativo de segurança para a tabela ${key}.`);
        mostrarToast("Cópia de segurança (Backup) anexada com sucesso!", "sucesso");
        fetchDiarias();
@@ -547,7 +546,7 @@ export default function DiariasDashboard() {
        const { error: uploadError } = await supabase.storage.from('comprovantes').upload(fileName, file);
        if (uploadError) throw uploadError;
        const { data: urlData } = supabase.storage.from('comprovantes').getPublicUrl(fileName);
-       await supabase.from('diarias').update({ recibo_url: urlData.publicUrl }).eq('id', id);
+       await supabase.from('diarias').update({ recibo_url: urlData.publicUrl, usuario_alteracao: usuarioLogado }).eq('id', id);
        await registrarLog('ANEXO INDIVIDUAL', `Anexou um recibo/foto para uma viagem individual.`);
        mostrarToast("Recibo anexado com sucesso!", "sucesso");
        fetchDiarias();
@@ -769,6 +768,7 @@ export default function DiariasDashboard() {
         numero_processo: formData.get('numero_processo') || "",
         observacoes: formData.get('observacoes') || "",
         pago: false,
+        usuario_cadastro: usuarioLogado, 
         usuario_alteracao: usuarioLogado
       }
 
@@ -981,7 +981,8 @@ export default function DiariasDashboard() {
       )}
 
       <nav className="bg-white border-b sticky top-0 z-50 shadow-sm w-full">
-        <div className="max-w-7xl mx-auto p-4 flex flex-col gap-4">
+        {/* Aumentado o max-w para acompanhar a nova tela mais larga */}
+        <div className="max-w-[1600px] mx-auto p-4 flex flex-col gap-4">
           
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-3">
@@ -1051,331 +1052,354 @@ export default function DiariasDashboard() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-4 lg:p-8 w-full">
+      {/* --- NOVO LAYOUT PRINCIPAL: DASHBOARD COM BARRA LATERAL ESQUERDA (SIDEBAR) --- */}
+      <main className="max-w-[1600px] mx-auto p-4 lg:p-6 w-full flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
         
-        {isAdmin && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 col-span-1 lg:col-span-2">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Divisão de Custos (Filtrado)</h3>
-              <div className="flex items-end gap-4 sm:gap-6 h-28 sm:h-32 mt-4">
-                <div className="flex-1 flex flex-col items-center justify-end h-full gap-2 group">
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 transition-opacity">R$ {dashboardGastoSEI.toFixed(0)}</span>
-                  <div className="w-full bg-blue-500 rounded-t-xl transition-all duration-1000" style={{ height: `${dashboardGastoTotal > 0 ? (dashboardGastoSEI / dashboardGastoTotal) * 100 : 0}%`, minHeight: '4px' }}></div>
-                  <span className="text-[8px] sm:text-[9px] font-black text-slate-600 uppercase">SEI</span>
+        {/* --- LADO ESQUERDO: BARRA LATERAL FIXA (FORMULÁRIO DE CADASTRO) --- */}
+        <aside className="w-full lg:w-[350px] xl:w-[400px] shrink-0 lg:sticky lg:top-24 z-10">
+          <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 flex flex-col h-auto lg:h-[calc(100vh-6.5rem)]">
+            <h2 className="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest shrink-0">Novo Registo</h2>
+            <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
+              <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
+                <AutocompleteInput name="nome" placeholder="Nome do Servidor" value={formNome} onChange={(e: any) => { setFormNome(e.target.value); const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase()); if(serv && serv.cargo) setFormCargo(serv.cargo); }} sugestoes={sugestoesNomes} required />
+                {metodoSelecionado === 'CONTA SALARIO' && <AutocompleteInput name="cargo" placeholder="Cargo" value={formCargo} onChange={(e: any) => setFormCargo(e.target.value)} sugestoes={sugestoesCargos} />}
+                <input name="adolescente_nome" placeholder="Adolescente / Motivo" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <input name="data" type="date" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
+                  <input name="valor" type="number" step="0.01" placeholder="R$ Valor" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
                 </div>
-                <div className="flex-1 flex flex-col items-center justify-end h-full gap-2 group">
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 transition-opacity">R$ {dashboardGastoSalario.toFixed(0)}</span>
-                  <div className="w-full bg-emerald-500 rounded-t-xl transition-all duration-1000" style={{ height: `${dashboardGastoTotal > 0 ? (dashboardGastoSalario / dashboardGastoTotal) * 100 : 0}%`, minHeight: '4px' }}></div>
-                  <span className="text-[8px] sm:text-[9px] font-black text-slate-600 uppercase">Salário</span>
+                
+                {metodoSelecionado === 'CONTA SALARIO' && <input name="quantidade" type="number" placeholder="Qtd. Diárias" className="border-2 border-emerald-100 p-2.5 sm:p-3 rounded-xl bg-emerald-50 text-sm font-medium text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-500 w-full" />}
+                
+                <AutocompleteInput name="local" placeholder="Destino / Cidade" value={formLocal} onChange={(e: any) => setFormLocal(e.target.value)} sugestoes={sugestoesLocais} required />
+                
+                <select value={metodoSelecionado} onChange={(e) => setMetodoSelecionado(e.target.value)} className="border p-2.5 sm:p-3 rounded-xl bg-slate-100 text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-blue-500 w-full">
+                  <option value="SEI">SISTEMA SEI</option>
+                  <option value="CONTA SALARIO">CONTA SALÁRIO</option>
+                </select>
+                
+                {metodoSelecionado === 'SEI' && <input name="numero_processo" placeholder="Nº Processo SEI" className="border-2 border-blue-100 p-2.5 sm:p-3 rounded-xl bg-blue-50 text-sm font-bold text-blue-800 uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} />}
+                
+                <textarea name="observacoes" placeholder="Observações..." className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500 w-full" rows={2} />
+                
+                <div className="flex items-center gap-2 px-1 py-1">
+                  <input type="checkbox" id="manterDados" checked={manterDados} onChange={(e) => setManterDados(e.target.checked)} className="w-5 h-5 cursor-pointer accent-slate-900 rounded shrink-0" />
+                  <label htmlFor="manterDados" className="text-[10px] font-black text-slate-500 uppercase cursor-pointer select-none hover:text-slate-800 transition-colors">Manter dados p/ próxima diária</label>
                 </div>
-              </div>
-              <div className="mt-4 text-center border-t border-slate-100 pt-4">
-                <span className="text-xl sm:text-2xl font-black text-slate-800">R$ {dashboardGastoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">Custo Total no Período</p>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 col-span-1">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Top 5 Viajantes (Custo)</h3>
-              <div className="flex flex-col gap-3">
-                {rankingTop5.map((pessoa: any, index: number) => (
-                  <div key={pessoa[0]} className="w-full">
-                    <div className="flex justify-between text-[9px] sm:text-[10px] font-bold text-slate-600 mb-1 gap-2">
-                      <span className="uppercase break-words">{index + 1}. {pessoa[0]}</span>
-                      <span className="shrink-0">R$ {pessoa[1].toFixed(0)}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-1.5 sm:h-2">
-                      <div className="bg-slate-800 h-1.5 sm:h-2 rounded-full transition-all duration-1000" style={{ width: `${(pessoa[1] / maiorValorRanking) * 100}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-                {rankingTop5.length === 0 && <p className="text-xs text-center text-slate-400 mt-10">Nenhum dado.</p>}
-              </div>
+                
+                <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-xs shadow-lg hover:bg-black transition-all active:scale-95 mt-1 shrink-0" disabled={isProcessing}>Salvar Diária</button>
+              </form>
             </div>
           </div>
-        )}
+        </aside>
 
-        {isAdmin && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] border-blue-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
-               <div>
-                  <h3 className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Novas SEI (A Gerar)</h3>
-                  <p className="text-xl sm:text-3xl font-black text-slate-900 break-words">R$ {totalNovoSEI.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-               </div>
-               <div className="flex flex-col items-center gap-2 shrink-0 ml-2">
-                  <div className="bg-blue-50 p-2 sm:p-3 rounded-xl sm:rounded-2xl text-xl sm:text-2xl">📂</div>
-                  {totalNovoSEI > 0 && (
-                    <button onClick={() => forcarBaixa('SEI')} className="text-[8px] font-black uppercase text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md border border-red-100 transition-colors w-full">🧹 Zerar</button>
-                  )}
-               </div> 
-            </div>
-            <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] border-emerald-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
-               <div>
-                  <h3 className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Novas Salário (A Gerar)</h3>
-                  <p className="text-xl sm:text-3xl font-black text-slate-900 break-words">R$ {totalNovoSalario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-               </div>
-               <div className="flex flex-col items-center gap-2 shrink-0 ml-2">
-                  <div className="bg-emerald-50 p-2 sm:p-3 rounded-xl sm:rounded-2xl text-xl sm:text-2xl">💳</div>
-                  {totalNovoSalario > 0 && (
-                    <button onClick={() => forcarBaixa('CONTA SALARIO')} className="text-[8px] font-black uppercase text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md border border-red-100 transition-colors w-full">🧹 Zerar</button>
-                  )}
-               </div>
-            </div>
-          </div>
-        )}
-
-        {/* --- GERENCIADOR DE TABELAS (PENDENTES E PAGAS) --- */}
-        {isAdmin && (tabelasPendentesArray.length > 0 || tabelasPagasArray.length > 0) && (
-          <div className="mb-8 bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xs font-black text-amber-600 uppercase tracking-widest flex items-center gap-2">
-                <span className="text-lg">⚠️</span> Pendências (Já Geradas)
-              </h2>
-              {tabelasPagasArray.length > 0 && (
-                <button onClick={() => setMostrarTabelasPagas(!mostrarTabelasPagas)} className="shrink-0 text-[9px] sm:text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors uppercase ml-2">
-                  {mostrarTabelasPagas ? 'Ocultar Histórico' : `Ver Pagas (${tabelasPagasArray.length})`}
-                </button>
-              )}
-            </div>
-
-            {tabelasPendentesArray.length === 0 && !mostrarTabelasPagas ? (
-               <p className="text-xs text-slate-400 italic mb-2">Nenhuma tabela pendente no momento.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
-                {tabelasPendentesArray.map((tabela: any, idx: number) => (
-                  <div key={idx} className="bg-amber-50 border border-amber-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between relative">
-                     <div className="absolute top-0 left-0 w-2 h-full bg-amber-400 rounded-l-2xl"></div>
-                     
-                     <div className="pl-4 pr-1 flex flex-col flex-1 w-full">
-                       <div className="flex justify-between items-start mb-3 gap-2">
-                         <div className="flex flex-col gap-1 items-start">
-                           <span className="text-[10px] font-black text-amber-800 uppercase bg-amber-100/80 px-2 py-1 rounded tracking-widest border border-amber-200">{tabela.metodo}</span>
-                           <span className="text-[10px] font-bold text-slate-500">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
-                         </div>
-                         <button onClick={() => excluirRelatorioGerado(tabela.ids)} className="text-amber-300 hover:text-red-500 transition-colors text-xl bg-white rounded-full p-1 shadow-sm shrink-0" title="Desfazer/Excluir Tabela">🗑️</button>
-                       </div>
-                       <h3 className="text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
-                       <p className="text-[10px] font-medium text-amber-700">{tabela.ids.length} diárias na tabela</p>
-                     </div>
-                     <div className="pl-4 mt-4 flex flex-col gap-2.5 w-full">
-                        <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="w-full bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
-                          📥 Refazer Download
-                        </button>
-                        {tabela.comprovante_url ? (
-                           <a href={tabela.comprovante_url} target="_blank" rel="noopener noreferrer" className="block w-full bg-slate-800 hover:bg-slate-900 text-white text-center py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
-                             📄 Ver Cópia Salva
-                           </a>
-                        ) : (
-                           <label className="w-full bg-white border border-dashed border-amber-300 hover:border-amber-500 text-amber-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center justify-center gap-2 text-center">
-                             {uploadingTabela === tabela.key ? '⏳ A enviar...' : '📤 Anexar Backup'}
-                             <input type="file" className="hidden" accept=".xlsx, .xls, .pdf" disabled={uploadingTabela === tabela.key} onChange={(e) => handleUploadComprovante(e, tabela.ids, tabela.key)} />
-                           </label>
-                        )}
-                        <button onClick={() => marcarTabelaPaga(tabela.ids)} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
-                          ✓ Marcar Tabela Paga
-                        </button>
-                     </div>
+        {/* --- LADO DIREITO: DADOS CADASTRADOS, GRÁFICOS E LISTAS --- */}
+        <section className="flex-1 w-full min-w-0 flex flex-col gap-6">
+          
+          {isAdmin && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Divisão de Custos (Filtrado)</h3>
+                <div className="flex items-end gap-4 sm:gap-6 h-28 sm:h-32 mt-4">
+                  <div className="flex-1 flex flex-col items-center justify-end h-full gap-2 group">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 transition-opacity">R$ {dashboardGastoSEI.toFixed(0)}</span>
+                    <div className="w-full bg-blue-500 rounded-t-xl transition-all duration-1000" style={{ height: `${dashboardGastoTotal > 0 ? (dashboardGastoSEI / dashboardGastoTotal) * 100 : 0}%`, minHeight: '4px' }}></div>
+                    <span className="text-[8px] sm:text-[9px] font-black text-slate-600 uppercase">SEI</span>
                   </div>
-                ))}
+                  <div className="flex-1 flex flex-col items-center justify-end h-full gap-2 group">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 transition-opacity">R$ {dashboardGastoSalario.toFixed(0)}</span>
+                    <div className="w-full bg-emerald-500 rounded-t-xl transition-all duration-1000" style={{ height: `${dashboardGastoTotal > 0 ? (dashboardGastoSalario / dashboardGastoTotal) * 100 : 0}%`, minHeight: '4px' }}></div>
+                    <span className="text-[8px] sm:text-[9px] font-black text-slate-600 uppercase">Salário</span>
+                  </div>
+                </div>
+                <div className="mt-4 text-center border-t border-slate-100 pt-4">
+                  <span className="text-xl sm:text-2xl font-black text-slate-800">R$ {dashboardGastoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">Custo Total no Período</p>
+                </div>
               </div>
-            )}
 
-            {/* --- QUADRO DE RESGATE DE TABELAS PAGAS --- */}
-            {mostrarTabelasPagas && tabelasPagasArray.length > 0 && (
-              <div className="mt-8 pt-6 border-t border-slate-100">
-                <h2 className="text-xs font-black text-green-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <span className="text-lg">✅</span> Tabelas Concluídas (Pagas)
+              <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Top 5 Viajantes (Custo)</h3>
+                <div className="flex flex-col gap-3">
+                  {rankingTop5.map((pessoa: any, index: number) => (
+                    <div key={pessoa[0]} className="w-full">
+                      <div className="flex justify-between text-[9px] sm:text-[10px] font-bold text-slate-600 mb-1 gap-2">
+                        <span className="uppercase break-words">{index + 1}. {pessoa[0]}</span>
+                        <span className="shrink-0">R$ {pessoa[1].toFixed(0)}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 sm:h-2">
+                        <div className="bg-slate-800 h-1.5 sm:h-2 rounded-full transition-all duration-1000" style={{ width: `${(pessoa[1] / maiorValorRanking) * 100}%` }}></div>
+                      </div>
+                    </div>
+                  ))}
+                  {rankingTop5.length === 0 && <p className="text-xs text-center text-slate-400 mt-10">Nenhum dado.</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] border-blue-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
+                 <div>
+                    <h3 className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Novas SEI (A Gerar)</h3>
+                    <p className="text-xl sm:text-3xl font-black text-slate-900 break-words">R$ {totalNovoSEI.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                 </div>
+                 <div className="flex flex-col items-center gap-2 shrink-0 ml-2">
+                    <div className="bg-blue-50 p-2 sm:p-3 rounded-xl sm:rounded-2xl text-xl sm:text-2xl">📂</div>
+                    {totalNovoSEI > 0 && (
+                      <button onClick={() => forcarBaixa('SEI')} className="text-[8px] font-black uppercase text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md border border-red-100 transition-colors w-full">🧹 Zerar</button>
+                    )}
+                 </div> 
+              </div>
+              <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] border-emerald-500 flex justify-between items-center transform hover:scale-[1.02] transition-transform duration-300">
+                 <div>
+                    <h3 className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Novas Salário (A Gerar)</h3>
+                    <p className="text-xl sm:text-3xl font-black text-slate-900 break-words">R$ {totalNovoSalario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                 </div>
+                 <div className="flex flex-col items-center gap-2 shrink-0 ml-2">
+                    <div className="bg-emerald-50 p-2 sm:p-3 rounded-xl sm:rounded-2xl text-xl sm:text-2xl">💳</div>
+                    {totalNovoSalario > 0 && (
+                      <button onClick={() => forcarBaixa('CONTA SALARIO')} className="text-[8px] font-black uppercase text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md border border-red-100 transition-colors w-full">🧹 Zerar</button>
+                    )}
+                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- GERENCIADOR DE TABELAS (PENDENTES E PAGAS) --- */}
+          {isAdmin && (tabelasPendentesArray.length > 0 || tabelasPagasArray.length > 0) && (
+            <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xs font-black text-amber-600 uppercase tracking-widest flex items-center gap-2">
+                  <span className="text-lg">⚠️</span> Pendências (Já Geradas)
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full opacity-90 hover:opacity-100 transition-opacity">
-                  {tabelasPagasArray.map((tabela: any, idx: number) => (
-                    <div key={idx} className="bg-green-50 border border-green-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between relative">
-                       <div className="absolute top-0 left-0 w-2 h-full bg-green-500 rounded-l-2xl"></div>
+                {tabelasPagasArray.length > 0 && (
+                  <button onClick={() => setMostrarTabelasPagas(!mostrarTabelasPagas)} className="shrink-0 text-[9px] sm:text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors uppercase ml-2">
+                    {mostrarTabelasPagas ? 'Ocultar Histórico' : `Ver Pagas (${tabelasPagasArray.length})`}
+                  </button>
+                )}
+              </div>
+
+              {tabelasPendentesArray.length === 0 && !mostrarTabelasPagas ? (
+                 <p className="text-xs text-slate-400 italic mb-2">Nenhuma tabela pendente no momento.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 w-full">
+                  {tabelasPendentesArray.map((tabela: any, idx: number) => (
+                    <div key={idx} className="bg-amber-50 border border-amber-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between relative">
+                       <div className="absolute top-0 left-0 w-2 h-full bg-amber-400 rounded-l-2xl"></div>
+                       
                        <div className="pl-4 pr-1 flex flex-col flex-1 w-full">
-                         <div className="flex flex-col gap-1 items-start mb-3">
-                           <span className="text-[10px] font-black text-green-800 uppercase bg-green-100 px-2 py-1 rounded tracking-widest border border-green-200">{tabela.metodo}</span>
-                           <span className="text-[10px] font-bold text-slate-500">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
+                         <div className="flex justify-between items-start mb-3 gap-2">
+                           <div className="flex flex-col gap-1 items-start">
+                             <span className="text-[10px] font-black text-amber-800 uppercase bg-amber-100/80 px-2 py-1 rounded tracking-widest border border-amber-200">{tabela.metodo}</span>
+                             <span className="text-[10px] font-bold text-slate-500">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
+                           </div>
+                           <button onClick={() => excluirRelatorioGerado(tabela.ids)} className="text-amber-300 hover:text-red-500 transition-colors text-xl bg-white rounded-full p-1 shadow-sm shrink-0" title="Desfazer/Excluir Tabela">🗑️</button>
                          </div>
                          <h3 className="text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
-                         <p className="text-[10px] font-medium text-green-700">{tabela.ids.length} diárias na tabela</p>
+                         <p className="text-[10px] font-medium text-amber-700">{tabela.ids.length} diárias na tabela</p>
                        </div>
                        <div className="pl-4 mt-4 flex flex-col gap-2.5 w-full">
-                          <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="w-full bg-white border border-green-200 hover:bg-green-100 text-green-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
+                          <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="w-full bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
                             📥 Refazer Download
                           </button>
-                          {tabela.comprovante_url && (
+                          {tabela.comprovante_url ? (
                              <a href={tabela.comprovante_url} target="_blank" rel="noopener noreferrer" className="block w-full bg-slate-800 hover:bg-slate-900 text-white text-center py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
                                📄 Ver Cópia Salva
                              </a>
+                          ) : (
+                             <label className="w-full bg-white border border-dashed border-amber-300 hover:border-amber-500 text-amber-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center justify-center gap-2 text-center">
+                               {uploadingTabela === tabela.key ? '⏳ A enviar...' : '📤 Anexar Backup'}
+                               <input type="file" className="hidden" accept=".xlsx, .xls, .pdf" disabled={uploadingTabela === tabela.key} onChange={(e) => handleUploadComprovante(e, tabela.ids, tabela.key)} />
+                             </label>
                           )}
-                          <button onClick={() => desmarcarTabelaPaga(tabela.ids)} className="w-full bg-white border-2 border-green-300 hover:bg-green-100 text-green-700 font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
-                            ↩️ Desfazer Pagamento
+                          <button onClick={() => marcarTabelaPaga(tabela.ids)} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
+                            ✓ Marcar Tabela Paga
                           </button>
                        </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 w-full">
-          
-          <aside className="lg:col-span-4 relative">
-            {/* --- AJUSTE FORMULÁRIO (COM SCROLL INTERNO BEM CALCULADO) --- */}
-            <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 lg:sticky lg:top-24 flex flex-col h-[calc(100vh-6rem)]">
-              <h2 className="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest shrink-0">Novo Registo</h2>
-              <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
-                <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
-                  <AutocompleteInput name="nome" placeholder="Nome do Servidor" value={formNome} onChange={(e: any) => { setFormNome(e.target.value); const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase()); if(serv && serv.cargo) setFormCargo(serv.cargo); }} sugestoes={sugestoesNomes} required />
-                  {metodoSelecionado === 'CONTA SALARIO' && <AutocompleteInput name="cargo" placeholder="Cargo" value={formCargo} onChange={(e: any) => setFormCargo(e.target.value)} sugestoes={sugestoesCargos} />}
-                  <input name="adolescente_nome" placeholder="Adolescente / Motivo" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
-                  
-                  <div className="grid grid-cols-2 gap-2">
-                    <input name="data" type="date" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
-                    <input name="valor" type="number" step="0.01" placeholder="R$ Valor" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
-                  </div>
-                  
-                  {metodoSelecionado === 'CONTA SALARIO' && <input name="quantidade" type="number" placeholder="Qtd. Diárias" className="border-2 border-emerald-100 p-2.5 sm:p-3 rounded-xl bg-emerald-50 text-sm font-medium text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-500 w-full" />}
-                  
-                  <AutocompleteInput name="local" placeholder="Destino / Cidade" value={formLocal} onChange={(e: any) => setFormLocal(e.target.value)} sugestoes={sugestoesLocais} required />
-                  
-                  <select value={metodoSelecionado} onChange={(e) => setMetodoSelecionado(e.target.value)} className="border p-2.5 sm:p-3 rounded-xl bg-slate-100 text-sm font-bold outline-none cursor-pointer focus:ring-2 focus:ring-blue-500 w-full">
-                    <option value="SEI">SISTEMA SEI</option>
-                    <option value="CONTA SALARIO">CONTA SALÁRIO</option>
-                  </select>
-                  
-                  {metodoSelecionado === 'SEI' && <input name="numero_processo" placeholder="Nº Processo SEI" className="border-2 border-blue-100 p-2.5 sm:p-3 rounded-xl bg-blue-50 text-sm font-bold text-blue-800 uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} />}
-                  
-                  <textarea name="observacoes" placeholder="Observações..." className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500 w-full" rows={2} />
-                  
-                  <div className="flex items-center gap-2 px-1 py-1">
-                    <input type="checkbox" id="manterDados" checked={manterDados} onChange={(e) => setManterDados(e.target.checked)} className="w-5 h-5 cursor-pointer accent-slate-900 rounded shrink-0" />
-                    <label htmlFor="manterDados" className="text-[10px] font-black text-slate-500 uppercase cursor-pointer select-none hover:text-slate-800 transition-colors">Manter dados p/ próxima diária</label>
-                  </div>
-                  
-                  <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-xs shadow-lg hover:bg-black transition-all active:scale-95 mt-1 shrink-0" disabled={isProcessing}>Salvar Diária</button>
-                </form>
-              </div>
-            </div>
-          </aside>
-
-          <section className="lg:col-span-8 w-full">
-            <div className="grid grid-cols-1 gap-4 w-full">
-              {diariasFiltradas.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-10 sm:p-20 opacity-50"><div className="text-4xl mb-2">📭</div><p className="font-bold text-slate-400 text-sm text-center">Nenhum registo encontrado.</p></div>
-              ) : (
-                /* --- LIMITANDO A RENDERIZAÇÃO PARA PAGINAÇÃO --- */
-                diariasFiltradas.slice(0, limiteVisivel).map((item) => (
-                  <div key={item.id} className={`bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] transition-all duration-300 ${item.pago ? 'border-green-500 bg-slate-50 opacity-90 hover:opacity-100' : 'border-red-500 shadow-md transform hover:-translate-y-1'}`}>
-                    
-                    {/* --- FORMULÁRIO DE EDIÇÃO COMPLETO --- */}
-                    {idEditando === item.id ? (
-                      <div className="bg-blue-50 p-4 sm:p-6 rounded-2xl border-2 border-blue-200 shadow-xl space-y-4 relative">
-                        <h3 className="font-black text-blue-800 uppercase italic mb-2 text-sm text-center sm:text-left">✏️ Editando Registo</h3>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.nome || ""} onChange={e => setDadosEditados({...dadosEditados, nome: e.target.value.toUpperCase()})} placeholder="Nome do Servidor" />
-                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.adolescente_nome || ""} onChange={e => setDadosEditados({...dadosEditados, adolescente_nome: e.target.value.toUpperCase()})} placeholder="Adolescente / Motivo" />
-                           
-                           <input type="date" className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.data_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, data_viagem: e.target.value})} />
-                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.local_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, local_viagem: e.target.value.toUpperCase()})} placeholder="Destino / Cidade" />
-                           
-                           <select className="border p-2.5 sm:p-3 rounded-lg text-sm w-full font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.metodo_pagamento || "SEI"} onChange={e => setDadosEditados({...dadosEditados, metodo_pagamento: e.target.value})}>
-                             <option value="SEI">SISTEMA SEI</option>
-                             <option value="CONTA SALARIO">CONTA SALÁRIO</option>
-                           </select>
-                           
-                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.numero_processo || ""} onChange={e => setDadosEditados({...dadosEditados, numero_processo: e.target.value.toUpperCase()})} placeholder="Nº Processo SEI" />
-                           
-                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.valor || ""} type="number" step="0.01" onChange={e => setDadosEditados({...dadosEditados, valor: e.target.value})} placeholder="Valor (R$)" />
-                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.cargo || ""} onChange={e => setDadosEditados({...dadosEditados, cargo: e.target.value.toUpperCase()})} placeholder="Cargo" />
-                           
-                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.quantidade || ""} type="number" onChange={e => setDadosEditados({...dadosEditados, quantidade: e.target.value})} placeholder="Qtd. Diárias" />
-                           
-                           <textarea className="col-span-1 sm:col-span-2 border p-2.5 sm:p-3 rounded-lg text-sm w-full resize-none outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.observacoes || ""} onChange={e => setDadosEditados({...dadosEditados, observacoes: e.target.value})} placeholder="Observações..." rows={2} />
-                        </div>
-                        
-                        <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                           <button onClick={salvarEdicao} className="w-full sm:w-auto flex-1 bg-green-600 hover:bg-green-700 text-white p-3.5 rounded-xl font-black uppercase text-[10px] shadow-md transition-colors" disabled={isProcessing}>💾 Salvar Alterações</button>
-                           <button onClick={() => setIdEditando(null)} className="w-full sm:w-auto flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 p-3.5 rounded-xl font-black uppercase text-[10px] transition-colors" disabled={isProcessing}>❌ Cancelar</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col sm:flex-row justify-between gap-4">
-                        <div className="flex-1 overflow-hidden">
-                          <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-2">
-                            <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-wider shrink-0 ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 animate-pulse'}`}>{item.pago ? '✓ PAGO' : '⚠ PENDENTE'}</span>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md shrink-0">{formatarDataBR(item.data_viagem)}</span>
-                            {item.data_ultima_exportacao && !item.pago && (
-                              <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md uppercase shrink-0">📥 Gerada</span>
-                            )}
-                          </div>
-                          
-                          <h3 className="font-black text-slate-800 uppercase text-base sm:text-lg leading-tight break-words">{item.nome}</h3>
-                          <p className="text-xs font-bold text-blue-600 uppercase mt-1 break-words">👦 {item.adolescente_nome}</p>
-                          
-                          <div className="mt-3 bg-slate-50 sm:bg-white border border-slate-100 p-3 rounded-xl text-[11px] sm:text-xs space-y-1.5 text-slate-600">
-                            <p className="flex items-start gap-2">📍 <span className="font-bold text-slate-800 uppercase flex-1 break-words">{item.local_viagem}</span></p>
-                            <p className="uppercase flex items-start gap-2">📄 <span className="break-words">{item.metodo_pagamento} {item.numero_processo ? `| SEI: ${item.numero_processo}` : ''}</span></p>
-                            {item.observacoes && <p className="italic text-slate-400 mt-2 border-t pt-2 border-slate-200 sm:border-slate-100 break-words">Obs: "{item.observacoes}"</p>}
-                            
-                            <div className="mt-3 pt-3 border-t border-slate-200 sm:border-slate-100 flex flex-wrap gap-2">
-                               {item.recibo_url ? (
-                                 <a href={item.recibo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors break-words">
-                                   📄 Ver Recibo Anexado
-                                 </a>
-                               ) : (
-                                 <label className="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 cursor-pointer transition-colors break-words">
-                                   {uploadingReciboId === item.id ? '⏳ A enviar...' : '📎 Anexar Recibo'}
-                                   <input type="file" className="hidden" accept="image/*,.pdf" disabled={uploadingReciboId === item.id} onChange={(e) => handleUploadReciboIndividual(e, item.id)} />
-                                 </label>
-                               )}
-
-                               <button onClick={() => gerarReciboPDF(item)} className="text-[10px] font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 transition-colors break-words">
-                                 🖨️ Imprimir Recibo
-                               </button>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="sm:text-right flex flex-col justify-between items-start sm:items-end border-t sm:border-t-0 pt-4 sm:pt-0 mt-2 sm:mt-0 shrink-0">
-                          <div className="text-left sm:text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end">
-                             <p className="font-black text-slate-900 text-xl sm:text-2xl break-words">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
-                             <div className="text-[8px] sm:text-[9px] text-slate-400 sm:mt-2 space-y-0.5 text-right">
-                               {item.created_at && <p className="flex items-center justify-end gap-1">➕ {new Date(item.created_at).toLocaleDateString('pt-BR')} <span className="bg-slate-100 text-slate-500 px-1 rounded font-bold hidden sm:inline-block break-words">{item.usuario_alteracao ? `por ${item.usuario_alteracao}` : ''}</span></p>}
-                               {item.updated_at && <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1">✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}</p>}
-                             </div>
-                          </div>
-                          
-                          {isAdmin && (
-                            <div className="flex gap-2 mt-4 w-full sm:w-auto">
-                              <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 sm:flex-none px-3 py-3 sm:py-2.5 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm break-words ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>{item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}</button>
-                              <button onClick={() => iniciarEdicao(item)} className="bg-slate-100 sm:bg-white border-2 border-slate-100 px-4 py-3 sm:py-2.5 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors shrink-0">✏️</button>
-                              <button onClick={() => excluirDiaria(item.id)} className="bg-slate-100 sm:bg-white border-2 border-slate-100 px-4 py-3 sm:py-2.5 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0">🗑️</button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))
               )}
 
-              {/* --- BOTAO CARREGAR MAIS --- */}
-              {limiteVisivel < diariasFiltradas.length && (
-                <div className="flex justify-center mt-6 mb-8">
-                  <button 
-                    onClick={() => setLimiteVisivel(prev => prev + 50)} 
-                    className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 font-black py-4 sm:py-3 px-8 rounded-2xl sm:rounded-xl text-[10px] sm:text-xs uppercase tracking-widest transition-colors shadow-sm active:scale-95 break-words"
-                  >
-                    🔄 Mostrar mais antigas... ({diariasFiltradas.length - limiteVisivel} ocultas)
-                  </button>
+              {/* --- QUADRO DE RESGATE DE TABELAS PAGAS --- */}
+              {mostrarTabelasPagas && tabelasPagasArray.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-slate-100">
+                  <h2 className="text-xs font-black text-green-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <span className="text-lg">✅</span> Tabelas Concluídas (Pagas)
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 w-full opacity-90 hover:opacity-100 transition-opacity">
+                    {tabelasPagasArray.map((tabela: any, idx: number) => (
+                      <div key={idx} className="bg-green-50 border border-green-200 p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col justify-between relative">
+                         <div className="absolute top-0 left-0 w-2 h-full bg-green-500 rounded-l-2xl"></div>
+                         <div className="pl-4 pr-1 flex flex-col flex-1 w-full">
+                           <div className="flex flex-col gap-1 items-start mb-3">
+                             <span className="text-[10px] font-black text-green-800 uppercase bg-green-100 px-2 py-1 rounded tracking-widest border border-green-200">{tabela.metodo}</span>
+                             <span className="text-[10px] font-bold text-slate-500">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
+                           </div>
+                           <h3 className="text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                           <p className="text-[10px] font-medium text-green-700">{tabela.ids.length} diárias na tabela</p>
+                         </div>
+                         <div className="pl-4 mt-4 flex flex-col gap-2.5 w-full">
+                            <button onClick={() => baixarRelatorioAntigo(tabela.metodo, tabela.ids, tabela.data)} className="w-full bg-white border border-green-200 hover:bg-green-100 text-green-700 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
+                              📥 Refazer Download
+                            </button>
+                            {tabela.comprovante_url && (
+                               <a href={tabela.comprovante_url} target="_blank" rel="noopener noreferrer" className="block w-full bg-slate-800 hover:bg-slate-900 text-white text-center py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-sm">
+                                 📄 Ver Cópia Salva
+                               </a>
+                            )}
+                            <button onClick={() => desmarcarTabelaPaga(tabela.ids)} className="w-full bg-white border-2 border-green-300 hover:bg-green-100 text-green-700 font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
+                              ↩️ Desfazer Pagamento
+                            </button>
+                         </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-          </section>
-        </div>
+          )}
+
+          {/* --- LISTA DE REGISTROS DE VIAGENS --- */}
+          <div className="grid grid-cols-1 gap-4 w-full">
+            {diariasFiltradas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-10 sm:p-20 opacity-50"><div className="text-4xl mb-2">📭</div><p className="font-bold text-slate-400 text-sm text-center">Nenhum registo encontrado.</p></div>
+            ) : (
+              /* --- LIMITANDO A RENDERIZAÇÃO PARA PAGINAÇÃO --- */
+              diariasFiltradas.slice(0, limiteVisivel).map((item) => (
+                <div key={item.id} className={`bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] transition-all duration-300 ${item.pago ? 'border-green-500 bg-slate-50 opacity-90 hover:opacity-100' : 'border-red-500 shadow-md transform hover:-translate-y-1'}`}>
+                  
+                  {/* --- FORMULÁRIO DE EDIÇÃO COMPLETO --- */}
+                  {idEditando === item.id ? (
+                    <div className="bg-blue-50 p-4 sm:p-6 rounded-2xl border-2 border-blue-200 shadow-xl space-y-4 relative">
+                      <h3 className="font-black text-blue-800 uppercase italic mb-2 text-sm text-center sm:text-left">✏️ Editando Registo</h3>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.nome || ""} onChange={e => setDadosEditados({...dadosEditados, nome: e.target.value.toUpperCase()})} placeholder="Nome do Servidor" />
+                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.adolescente_nome || ""} onChange={e => setDadosEditados({...dadosEditados, adolescente_nome: e.target.value.toUpperCase()})} placeholder="Adolescente / Motivo" />
+                         
+                         <input type="date" className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.data_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, data_viagem: e.target.value})} />
+                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.local_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, local_viagem: e.target.value.toUpperCase()})} placeholder="Destino / Cidade" />
+                         
+                         <select className="border p-2.5 sm:p-3 rounded-lg text-sm w-full font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.metodo_pagamento || "SEI"} onChange={e => setDadosEditados({...dadosEditados, metodo_pagamento: e.target.value})}>
+                           <option value="SEI">SISTEMA SEI</option>
+                           <option value="CONTA SALARIO">CONTA SALÁRIO</option>
+                         </select>
+                         
+                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.numero_processo || ""} onChange={e => setDadosEditados({...dadosEditados, numero_processo: e.target.value.toUpperCase()})} placeholder="Nº Processo SEI" />
+                         
+                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.valor || ""} type="number" step="0.01" onChange={e => setDadosEditados({...dadosEditados, valor: e.target.value})} placeholder="Valor (R$)" />
+                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.cargo || ""} onChange={e => setDadosEditados({...dadosEditados, cargo: e.target.value.toUpperCase()})} placeholder="Cargo" />
+                         
+                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.quantidade || ""} type="number" onChange={e => setDadosEditados({...dadosEditados, quantidade: e.target.value})} placeholder="Qtd. Diárias" />
+                         
+                         <textarea className="col-span-1 sm:col-span-2 border p-2.5 sm:p-3 rounded-lg text-sm w-full resize-none outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.observacoes || ""} onChange={e => setDadosEditados({...dadosEditados, observacoes: e.target.value})} placeholder="Observações..." rows={2} />
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                         <button onClick={salvarEdicao} className="w-full sm:w-auto flex-1 bg-green-600 hover:bg-green-700 text-white p-3.5 rounded-xl font-black uppercase text-[10px] shadow-md transition-colors" disabled={isProcessing}>💾 Salvar Alterações</button>
+                         <button onClick={() => setIdEditando(null)} className="w-full sm:w-auto flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 p-3.5 rounded-xl font-black uppercase text-[10px] transition-colors" disabled={isProcessing}>❌ Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row justify-between gap-4">
+                      <div className="flex-1 overflow-hidden">
+                        <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-2">
+                          <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-wider shrink-0 ${item.pago ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 animate-pulse'}`}>{item.pago ? '✓ PAGO' : '⚠ PENDENTE'}</span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md shrink-0">{formatarDataBR(item.data_viagem)}</span>
+                          {item.data_ultima_exportacao && !item.pago && (
+                            <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md uppercase shrink-0">📥 Gerada</span>
+                          )}
+                        </div>
+                        
+                        <h3 className="font-black text-slate-800 uppercase text-base sm:text-lg leading-tight break-words">{item.nome}</h3>
+                        <p className="text-xs font-bold text-blue-600 uppercase mt-1 break-words">👦 {item.adolescente_nome}</p>
+                        
+                        <div className="mt-3 bg-slate-50 sm:bg-white border border-slate-100 p-3 rounded-xl text-[11px] sm:text-xs space-y-1.5 text-slate-600">
+                          <p className="flex items-start gap-2">📍 <span className="font-bold text-slate-800 uppercase flex-1 break-words">{item.local_viagem}</span></p>
+                          <p className="uppercase flex items-start gap-2">📄 <span className="break-words">{item.metodo_pagamento} {item.numero_processo ? `| SEI: ${item.numero_processo}` : ''}</span></p>
+                          {item.observacoes && <p className="italic text-slate-400 mt-2 border-t pt-2 border-slate-200 sm:border-slate-100 break-words">Obs: "{item.observacoes}"</p>}
+                          
+                          <div className="mt-3 pt-3 border-t border-slate-200 sm:border-slate-100 flex flex-wrap gap-2">
+                             {item.recibo_url ? (
+                               <a href={item.recibo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors break-words">
+                                 📄 Ver Recibo Anexado
+                               </a>
+                             ) : (
+                               <label className="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 cursor-pointer transition-colors break-words">
+                                 {uploadingReciboId === item.id ? '⏳ A enviar...' : '📎 Anexar Recibo'}
+                                 <input type="file" className="hidden" accept="image/*,.pdf" disabled={uploadingReciboId === item.id} onChange={(e) => handleUploadReciboIndividual(e, item.id)} />
+                               </label>
+                             )}
+
+                             <button onClick={() => gerarReciboPDF(item)} className="text-[10px] font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 transition-colors break-words">
+                               🖨️ Imprimir Recibo
+                             </button>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="sm:text-right flex flex-col justify-between items-start sm:items-end border-t sm:border-t-0 pt-4 sm:pt-0 mt-2 sm:mt-0 shrink-0">
+                        <div className="text-left sm:text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end">
+                           <p className="font-black text-slate-900 text-xl sm:text-2xl break-words">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
+                           
+                           {/* Renderizando QUEM CADASTROU E QUEM EDITOU claramente */}
+                           <div className="text-[8px] sm:text-[9px] text-slate-400 sm:mt-2 space-y-1 text-right flex flex-col items-end">
+                             {item.created_at && (
+                               <p className="flex items-center justify-end gap-1 flex-wrap">
+                                 ➕ {new Date(item.created_at).toLocaleDateString('pt-BR')} 
+                                 {item.usuario_cadastro && (
+                                   <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold break-words border border-slate-200">
+                                     Criado por: {item.usuario_cadastro}
+                                   </span>
+                                 )}
+                               </p>
+                             )}
+                             
+                             {item.updated_at && (
+                               <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1 flex-wrap mt-1">
+                                 ✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}
+                                 {item.usuario_alteracao && item.usuario_alteracao !== item.usuario_cadastro && (
+                                   <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold break-words border border-amber-200">
+                                     Editado por: {item.usuario_alteracao}
+                                   </span>
+                                 )}
+                               </p>
+                             )}
+                           </div>
+
+                        </div>
+                        
+                        {isAdmin && (
+                          <div className="flex gap-2 mt-4 w-full sm:w-auto">
+                            <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 sm:flex-none px-3 py-3 sm:py-2.5 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm break-words ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>{item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}</button>
+                            <button onClick={() => iniciarEdicao(item)} className="bg-slate-100 sm:bg-white border-2 border-slate-100 px-4 py-3 sm:py-2.5 rounded-xl hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors shrink-0">✏️</button>
+                            <button onClick={() => excluirDiaria(item.id)} className="bg-slate-100 sm:bg-white border-2 border-slate-100 px-4 py-3 sm:py-2.5 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0">🗑️</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+
+            {/* --- BOTAO CARREGAR MAIS --- */}
+            {limiteVisivel < diariasFiltradas.length && (
+              <div className="flex justify-center mt-6 mb-8">
+                <button 
+                  onClick={() => setLimiteVisivel(prev => prev + 50)} 
+                  className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 font-black py-4 sm:py-3 px-8 rounded-2xl sm:rounded-xl text-[10px] sm:text-xs uppercase tracking-widest transition-colors shadow-sm active:scale-95 break-words"
+                >
+                  🔄 Mostrar mais antigas... ({diariasFiltradas.length - limiteVisivel} ocultas)
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
       </main>
 
       {mostrarPortal && (
