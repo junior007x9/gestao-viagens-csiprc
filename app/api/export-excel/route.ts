@@ -23,10 +23,12 @@ export async function POST(req: Request) {
     // Pega a altura da linha 10 como base (ou 25 se falhar)
     const alturaBase = sheet.row(10).height() || 25;
 
-    // --- CORREÇÃO CRÍTICA ---
-    for (let r = 10; r <= 800; r++) {
+    // --- CORREÇÃO CRÍTICA (FIM DO DESPERDÍCIO DE PÁGINAS) ---
+    // Em vez de deixar visível, OCULTAMOS todas as linhas vazias.
+    // O Excel só vai imprimir o que estiver visível!
+    for (let r = 10; r <= 1000; r++) {
         const linha = sheet.row(r);
-        linha.hidden(false); // Remove ocultação
+        linha.hidden(true); // <--- DEIXA A LINHA OCULTA POR PADRÃO
         linha.height(alturaBase); // Força altura padrão
         
         ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(c => {
@@ -87,20 +89,18 @@ export async function POST(req: Request) {
     for (const dataExp of datasOrdenadas) {
         const pessoas = gruposPorData[dataExp];
 
-        // 5.1 Insere a faixa (banner) avisando a data (SEM MESCLAR, SÓ PINTAR)
+        // 5.1 Insere a faixa (banner) avisando a data
         if (dataExp !== 'NOVAS') {
             const dataFormatada = dataExp.split('-').reverse().join('/');
-            sheet.row(row).hidden(false).height(30); 
+            sheet.row(row).hidden(false).height(30); // Desoculta apenas esta linha
             
-            // Pinta a linha toda
             ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
                 sheet.cell(`${col}${row}`).style({ fill: 'FFF9C4', border: true });
             });
-            // Escreve apenas na coluna B
             sheet.cell(`B${row}`).value(`⚠️ TABELA GERADA DIA ${dataFormatada}`).style({ bold: true, fontColor: '000000', horizontalAlignment: 'left', verticalAlignment: 'center' });
             row++;
         } else if (datasOrdenadas.length > 1) {
-             sheet.row(row).hidden(false).height(30);
+             sheet.row(row).hidden(false).height(30); // Desoculta apenas esta linha
              
              ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
                 sheet.cell(`${col}${row}`).style({ fill: 'E8F5E9', border: true });
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
                  ultimaLinhaDados = row;
                  const isFirst = indexViagem === 0;
 
-                 sheet.row(row).hidden(false).height(alturaBase);
+                 sheet.row(row).hidden(false).height(alturaBase); // Desoculta apenas a linha sendo usada
                  
                  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => aplicarEstiloBase(row, col));
 
@@ -157,10 +157,10 @@ export async function POST(req: Request) {
                  row++;
              });
 
-             // 5.3 SUBTOTAL (SEM MESCLAR, SÓ PINTAR)
+             // 5.3 SUBTOTAL
              if (arrayViagens.length > 1) {
                  ultimaLinhaDados = row;
-                 sheet.row(row).hidden(false).height(alturaBase); 
+                 sheet.row(row).hidden(false).height(alturaBase); // Desoculta a linha do subtotal
                  
                  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
                      sheet.cell(`${col}${row}`).style({ fill: 'F3F4F6', border: true });
@@ -183,7 +183,7 @@ export async function POST(req: Request) {
     if (ultimaLinhaDados < 10) ultimaLinhaDados = 10;
     const linhaTotal = ultimaLinhaDados + 2;
 
-    sheet.row(linhaTotal).hidden(false).height(alturaBase);
+    sheet.row(linhaTotal).hidden(false).height(alturaBase); // Desoculta a linha do total geral
 
     if (metodoSelecionado === 'SEI') {
       sheet.cell(`G${linhaTotal}`).value("TOTAL GERAL:").style({ bold: true, horizontalAlignment: 'right' });
