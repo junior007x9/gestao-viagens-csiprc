@@ -604,11 +604,20 @@ export default function DiariasDashboard() {
 
   async function removerServidor(id: number) {
     if(!isAdmin) return;
+    
+    const servidorDeletado = servidores.find(s => s.id === id);
+
     if(confirm("Remover este membro da equipa permanentemente?")) { 
       setIsProcessing(true); setProcessMsg('A remover membro...');
       try {
         await supabase.from('servidores').delete().eq('id', id); 
-        await registrarLog('GERENCIAMENTO', `Removeu um servidor da lista de equipa.`);
+        
+        const detalhesLog = servidorDeletado 
+          ? `Removeu o servidor ${servidorDeletado.nome} da lista de equipa.`
+          : `Removeu um servidor da lista de equipa.`;
+
+        await registrarLog('GERENCIAMENTO', detalhesLog);
+        
         fetchServidores(); 
         mostrarToast("Membro removido da equipa.", "info");
       } finally {
@@ -839,11 +848,22 @@ export default function DiariasDashboard() {
 
   async function excluirDiaria(id: string) {
     if(!isAdmin) return;
+    
+    // 1. Encontra os dados exatos do registro ANTES de excluí-lo
+    const registroDeletado = diarias.find(d => d.id === id);
+    
     if (confirm("Excluir este registo permanentemente?")) { 
       setIsProcessing(true); setProcessMsg('A excluir o registo definitivamente...');
       try {
         await supabase.from('diarias').delete().eq('id', id); 
-        await registrarLog('EXCLUSÃO', `Removeu definitivamente um registo do sistema.`);
+        
+        // 2. Cria uma mensagem detalhada para a auditoria
+        const detalhesLog = registroDeletado 
+          ? `Excluiu definitivamente a viagem de ${registroDeletado.nome} (Destino: ${registroDeletado.local_viagem} | R$ ${Number(registroDeletado.valor).toFixed(2)}).`
+          : `Removeu definitivamente um registo desconhecido do sistema.`;
+
+        await registrarLog('EXCLUSÃO', detalhesLog);
+        
         fetchDiarias(); 
         mostrarToast("Registo excluído.", "info");
       } finally {
@@ -1286,7 +1306,7 @@ export default function DiariasDashboard() {
                          <div className="pl-4 pr-1 flex flex-col flex-1 w-full">
                            <div className="flex flex-col gap-1 items-start mb-3">
                              <span className="text-[10px] font-black text-green-800 uppercase bg-green-100 px-2 py-1 rounded tracking-widest border border-green-200">{tabela.metodo}</span>
-                             <span className="text-[10px] font-bold text-slate-500">Paga em {new Date((tabela.ids.length > 0) ? (diarias.find(d => d.id === tabela.ids[0])?.data_pagamento || tabela.data) : tabela.data).toLocaleDateString('pt-BR')}</span>
+                             <span className="text-[10px] font-bold text-slate-500">Paga em {new Date((tabela.ids.length > 0) ? (diarias.find((d: any) => d.id === tabela.ids[0])?.data_pagamento || tabela.data) : tabela.data).toLocaleDateString('pt-BR')}</span>
                            </div>
                            <h3 className="text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                            <p className="text-[10px] font-medium text-green-700">{tabela.ids.length} diárias na tabela</p>
