@@ -1286,7 +1286,7 @@ export default function DiariasDashboard() {
                          <div className="pl-4 pr-1 flex flex-col flex-1 w-full">
                            <div className="flex flex-col gap-1 items-start mb-3">
                              <span className="text-[10px] font-black text-green-800 uppercase bg-green-100 px-2 py-1 rounded tracking-widest border border-green-200">{tabela.metodo}</span>
-                             <span className="text-[10px] font-bold text-slate-500">Paga em {new Date(tabela.ids.length > 0 ? diarias.find(d => d.id === tabela.ids[0])?.data_pagamento || tabela.data).toLocaleDateString('pt-BR')}</span>
+                             <span className="text-[10px] font-bold text-slate-500">Paga em {new Date((tabela.ids.length > 0) ? (diarias.find(d => d.id === tabela.ids[0])?.data_pagamento || tabela.data) : tabela.data).toLocaleDateString('pt-BR')}</span>
                            </div>
                            <h3 className="text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                            <p className="text-[10px] font-medium text-green-700">{tabela.ids.length} diárias na tabela</p>
