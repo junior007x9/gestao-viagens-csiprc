@@ -121,6 +121,11 @@ export default function DiariasDashboard() {
   const [limiteVisivel, setLimiteVisivel] = useState(50)
   const [mostrarTabelasPagas, setMostrarTabelasPagas] = useState(false)
 
+  // --- NOVOS ESTADOS PARA A BAIXA COM DATA ---
+  const [modalBaixaAberto, setModalBaixaAberto] = useState(false)
+  const [idsParaBaixa, setIdsParaBaixa] = useState<string[]>([])
+  const [dataBaixa, setDataBaixa] = useState(new Date().toISOString().split('T')[0])
+
   useEffect(() => {
     setLimiteVisivel(50);
   }, [pesquisa, filtroMetodo, filtroStatus, dataInicioRelatorio, dataFimRelatorio, ordemData]);
@@ -273,29 +278,30 @@ export default function DiariasDashboard() {
   const totalNovoSEI = diariasNaoGeradasNoPeriodo.filter(d => d.metodo_pagamento === 'SEI').reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
   const totalNovoSalario = diariasNaoGeradasNoPeriodo.filter(d => d.metodo_pagamento === 'CONTA SALARIO').reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
 
-  // --- FUNÇÃO PARA FORÇAR A BAIXA (ZERAR O "A GERAR" PRESO) ---
-  const forcarBaixa = async (metodo: string) => {
+  // --- FUNÇÃO PARA GERAR A TABELA E MOVER PARA PENDÊNCIAS (SUBSTITUI O ANTIGO ZERAR) ---
+  const gerarTabelaPendencias = async (metodo: string) => {
     if (!isAdmin) return;
-    if (!confirm(`Tem a certeza que deseja limpar as pendências "A Gerar" de ${metodo}?\nElas serão dadas como geradas e pagas.`)) return;
+    if (!confirm(`Tem a certeza que deseja gerar a tabela de pendências para ${metodo}?\nAs diárias sairão daqui e irão para o quadro de Pendências aguardando o pagamento na conta.`)) return;
 
-    const pendentesParaBaixa = diarias.filter(d => !d.pago && !d.data_ultima_exportacao && d.metodo_pagamento === metodo);
-    const ids = pendentesParaBaixa.map(d => d.id);
+    const pendentes = diarias.filter(d => !d.pago && !d.data_ultima_exportacao && d.metodo_pagamento === metodo);
+    const ids = pendentes.map(d => d.id);
     
-    if (ids.length === 0) return mostrarToast("Não há valor para zerar.", "info");
+    if (ids.length === 0) return mostrarToast("Não há diárias para gerar.", "info");
 
-    setIsProcessing(true); setProcessMsg(`A forçar baixa do método ${metodo}...`);
+    setIsProcessing(true); setProcessMsg(`A gerar tabela de ${metodo}...`);
     try {
       const agora = new Date().toISOString();
       
+      // Atualiza apenas a data de exportação, mantendo pago = false (Aguardando Pagamento)
       await Promise.all(ids.map(id => 
         supabase.from('diarias').update({ 
-          data_ultima_exportacao: agora, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado 
+          data_ultima_exportacao: agora, updated_at: agora, usuario_alteracao: usuarioLogado 
         }).eq('id', id)
       ));
 
-      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
-      await registrarLog('BAIXA FORÇADA', `Limpou o quadro A Gerar de ${metodo} (Forçou a baixa de ${ids.length} registos).`);
-      mostrarToast(`Limpeza efetuada! O valor foi zerado.`, "sucesso");
+      setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
+      await registrarLog('TABELA GERADA', `Gerou tabela de ${metodo} (${ids.length} viagens) e enviou para pendências.`);
+      mostrarToast(`Tabela gerada e enviada para as Pendências!`, "sucesso");
     } finally {
       setIsProcessing(false);
     }
@@ -436,15 +442,10 @@ export default function DiariasDashboard() {
         if (idsAExportar.length > 0) {
            const agora = new Date().toISOString();
            
-           if (metodo === 'CONTA SALARIO') {
-              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, pago: true, data_pagamento: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
-              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, pago: true, data_pagamento: agora, usuario_alteracao: usuarioLogado } : d));
-              mostrarToast("Transferência concluída! Diárias marcadas como geradas e pagas automaticamente.", "sucesso");
-           } else {
-              await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
-              setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado } : d));
-              mostrarToast("Transferência concluída! Diárias enviadas para pendências.", "sucesso");
-           }
+           // Agora todos os métodos apenas geram a tabela e vão para as pendências (pago continua false)
+           await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
+           setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado } : d));
+           mostrarToast("Relatório gerado! Diárias enviadas para pendências.", "sucesso");
            
            await registrarLog('GERAÇÃO DE RELATÓRIO', `Gerou nova tabela Excel para diárias via ${metodo}.`);
            fetchDiarias();
@@ -616,20 +617,45 @@ export default function DiariasDashboard() {
     }
   }
 
-  async function marcarTabelaPaga(ids: string[]) {
+  // --- FUNÇÕES DE BAIXA DE PAGAMENTO ---
+  function abrirModalBaixa(ids: string[]) {
     if (!isAdmin) return;
-    if (confirm(`Confirmar o pagamento desta tabela de uma só vez? \nEla sairá das Pendências e irá para o Histórico de Pagas.`)) {
-      setIsProcessing(true); setProcessMsg('A processar e arquivar tabela como Paga...');
-      try {
-        const agora = new Date().toISOString();
-        await Promise.all(ids.map(id => supabase.from('diarias').update({ pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
-        setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, pago: true, data_pagamento: agora, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
-        await registrarLog('PAGAMENTO EM LOTE', `Marcou uma tabela inteira (${ids.length} viagens) como PAGA.`);
-        fetchDiarias();
-        mostrarToast(`Tabela marcada como PAGA!`, "sucesso");
-      } finally {
-        setIsProcessing(false);
-      }
+    setIdsParaBaixa(ids);
+    setDataBaixa(new Date().toISOString().split('T')[0]); // Seta a data atual como padrão
+    setModalBaixaAberto(true);
+  }
+
+  async function confirmarBaixaTabela() {
+    if (!isAdmin || idsParaBaixa.length === 0) return;
+    setIsProcessing(true); setProcessMsg('A processar e arquivar tabela como Paga...');
+    
+    try {
+      const agora = new Date().toISOString();
+      // Ajusta a data para evitar problemas de fuso horário
+      const dataPagamentoFormatada = new Date(`${dataBaixa}T12:00:00Z`).toISOString();
+
+      await Promise.all(idsParaBaixa.map(id => 
+        supabase.from('diarias').update({ 
+          pago: true, 
+          data_pagamento: dataPagamentoFormatada, 
+          updated_at: agora, 
+          usuario_alteracao: usuarioLogado 
+        }).eq('id', id)
+      ));
+      
+      setDiarias(prev => prev.map(d => idsParaBaixa.includes(d.id) ? { 
+        ...d, pago: true, data_pagamento: dataPagamentoFormatada, updated_at: agora, usuario_alteracao: usuarioLogado 
+      } : d));
+      
+      await registrarLog('PAGAMENTO EM LOTE', `Marcou uma tabela inteira (${idsParaBaixa.length} viagens) como PAGA na data ${formatarDataBR(dataPagamentoFormatada)}.`);
+      
+      setModalBaixaAberto(false);
+      setIdsParaBaixa([]);
+      mostrarToast(`Tabela marcada como PAGA com sucesso!`, "sucesso");
+    } catch(err) {
+      mostrarToast(`Erro ao marcar como paga.`, "erro");
+    } finally {
+      setIsProcessing(false);
     }
   }
 
@@ -917,6 +943,28 @@ export default function DiariasDashboard() {
         </div>
       )}
 
+      {/* MODAL DE DAR BAIXA (DATA) */}
+      {isAdmin && modalBaixaAberto && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-6 relative">
+            <h2 className="text-xl font-black text-slate-800 mb-2 uppercase italic flex items-center gap-2">💰 Dar Baixa</h2>
+            <p className="text-xs text-slate-500 mb-4">Selecione a data exata em que o dinheiro caiu na conta:</p>
+            
+            <input 
+              type="date" 
+              value={dataBaixa} 
+              onChange={(e) => setDataBaixa(e.target.value)} 
+              className="w-full border p-3 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-green-500 mb-6 bg-slate-50 cursor-pointer"
+            />
+            
+            <div className="flex gap-3">
+              <button onClick={confirmarBaixaTabela} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg text-xs uppercase transition-colors" disabled={isProcessing}>Confirmar Baixa</button>
+              <button onClick={() => setModalBaixaAberto(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 rounded-lg text-xs uppercase transition-colors" disabled={isProcessing}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE AUDITORIA (LOGS) */}
       {isAdmin && mostrarLogs && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
@@ -1149,7 +1197,7 @@ export default function DiariasDashboard() {
                  <div className="flex flex-col items-center gap-2 shrink-0 ml-2">
                     <div className="bg-blue-50 p-2 sm:p-3 rounded-xl sm:rounded-2xl text-xl sm:text-2xl">📂</div>
                     {totalNovoSEI > 0 && (
-                      <button onClick={() => forcarBaixa('SEI')} className="text-[8px] font-black uppercase text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md border border-red-100 transition-colors w-full">🧹 Zerar</button>
+                      <button onClick={() => gerarTabelaPendencias('SEI')} className="text-[9px] font-black uppercase text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-md border border-blue-100 transition-colors w-full whitespace-nowrap">Gerar Tabela</button>
                     )}
                  </div> 
               </div>
@@ -1161,7 +1209,7 @@ export default function DiariasDashboard() {
                  <div className="flex flex-col items-center gap-2 shrink-0 ml-2">
                     <div className="bg-emerald-50 p-2 sm:p-3 rounded-xl sm:rounded-2xl text-xl sm:text-2xl">💳</div>
                     {totalNovoSalario > 0 && (
-                      <button onClick={() => forcarBaixa('CONTA SALARIO')} className="text-[8px] font-black uppercase text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md border border-red-100 transition-colors w-full">🧹 Zerar</button>
+                      <button onClick={() => gerarTabelaPendencias('CONTA SALARIO')} className="text-[9px] font-black uppercase text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-md border border-emerald-100 transition-colors w-full whitespace-nowrap">Gerar Tabela</button>
                     )}
                  </div>
               </div>
@@ -1215,7 +1263,8 @@ export default function DiariasDashboard() {
                                <input type="file" className="hidden" accept=".xlsx, .xls, .pdf" disabled={uploadingTabela === tabela.key} onChange={(e) => handleUploadComprovante(e, tabela.ids, tabela.key)} />
                              </label>
                           )}
-                          <button onClick={() => marcarTabelaPaga(tabela.ids)} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
+                          {/* BOTÃO ALTERADO PARA ABRIR O MODAL DE DATA */}
+                          <button onClick={() => abrirModalBaixa(tabela.ids)} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
                             ✓ Marcar Tabela Paga
                           </button>
                        </div>
@@ -1237,7 +1286,7 @@ export default function DiariasDashboard() {
                          <div className="pl-4 pr-1 flex flex-col flex-1 w-full">
                            <div className="flex flex-col gap-1 items-start mb-3">
                              <span className="text-[10px] font-black text-green-800 uppercase bg-green-100 px-2 py-1 rounded tracking-widest border border-green-200">{tabela.metodo}</span>
-                             <span className="text-[10px] font-bold text-slate-500">Gerada {new Date(tabela.data).toLocaleDateString('pt-BR')}</span>
+                             <span className="text-[10px] font-bold text-slate-500">Paga em {new Date(tabela.ids.length > 0 ? diarias.find(d => d.id === tabela.ids[0])?.data_pagamento || tabela.data).toLocaleDateString('pt-BR')}</span>
                            </div>
                            <h3 className="text-2xl font-black text-slate-900 mt-1 mb-1 break-words">R$ {tabela.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                            <p className="text-[10px] font-medium text-green-700">{tabela.ids.length} diárias na tabela</p>
