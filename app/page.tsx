@@ -57,26 +57,6 @@ export default function DiariasDashboard() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processMsg, setProcessMsg] = useState('Processando...');
 
-  // --- ESTADO PARA O CABEÇALHO INTELIGENTE (OCULTA NO SCROLL) ---
-  const [mostrarNav, setMostrarNav] = useState(true);
-  const ultimoScrollY = useRef(0);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const atualScrollY = window.scrollY;
-      // Se rolou para baixo mais de 50px, oculta. Se rolou para cima, mostra.
-      if (atualScrollY > ultimoScrollY.current && atualScrollY > 50) {
-        setMostrarNav(false);
-      } else {
-        setMostrarNav(true);
-      }
-      ultimoScrollY.current = atualScrollY;
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   // --- SISTEMA DE NOTIFICAÇÕES (TOASTS) ---
   const [toast, setToast] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'info', id: number } | null>(null);
 
@@ -136,6 +116,9 @@ export default function DiariasDashboard() {
 
   const [ordemData, setOrdemData] = useState<'DESC' | 'ASC'>('ASC')
   const [manterDados, setManterDados] = useState(false)
+  
+  // --- ESTADO PARA OCULTAR/MOSTRAR OS FILTROS ---
+  const [filtrosAbertos, setFiltrosAbertos] = useState(true)
 
   // --- ESTADO DA PAGINAÇÃO E TABELAS PAGAS ---
   const [limiteVisivel, setLimiteVisivel] = useState(50)
@@ -298,7 +281,6 @@ export default function DiariasDashboard() {
   const totalNovoSEI = diariasNaoGeradasNoPeriodo.filter(d => d.metodo_pagamento === 'SEI').reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
   const totalNovoSalario = diariasNaoGeradasNoPeriodo.filter(d => d.metodo_pagamento === 'CONTA SALARIO').reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
 
-  // --- FUNÇÃO PARA GERAR A TABELA E MOVER PARA PENDÊNCIAS (SUBSTITUI O ANTIGO ZERAR) ---
   const gerarTabelaPendencias = async (metodo: string) => {
     if (!isAdmin) return;
     if (!confirm(`Tem a certeza que deseja gerar a tabela de pendências para ${metodo}?\nAs diárias sairão daqui e irão para o quadro de Pendências aguardando o pagamento na conta.`)) return;
@@ -311,8 +293,6 @@ export default function DiariasDashboard() {
     setIsProcessing(true); setProcessMsg(`A gerar tabela de ${metodo}...`);
     try {
       const agora = new Date().toISOString();
-      
-      // Atualiza apenas a data de exportação, mantendo pago = false (Aguardando Pagamento)
       await Promise.all(ids.map(id => 
         supabase.from('diarias').update({ 
           data_ultima_exportacao: agora, updated_at: agora, usuario_alteracao: usuarioLogado 
@@ -327,7 +307,6 @@ export default function DiariasDashboard() {
     }
   }
 
-  // --- FUNÇÃO PARA AGRUPAR TABELAS ---
   const agruparTabelas = (lista: any[]) => {
     const agrupado = lista.reduce((acc, d) => {
        const dataStr = d.data_ultima_exportacao.split('T')[0];
@@ -461,8 +440,6 @@ export default function DiariasDashboard() {
         const idsAExportar = listaPendentes.map(d => d.id);
         if (idsAExportar.length > 0) {
            const agora = new Date().toISOString();
-           
-           // Agora todos os métodos apenas geram a tabela e vão para as pendências (pago continua false)
            await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
            setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado } : d));
            mostrarToast("Relatório gerado! Diárias enviadas para pendências.", "sucesso");
@@ -660,7 +637,6 @@ export default function DiariasDashboard() {
     
     try {
       const agora = new Date().toISOString();
-      // Ajusta a data para evitar problemas de fuso horário
       const dataPagamentoFormatada = new Date(`${dataBaixa}T12:00:00Z`).toISOString();
 
       await Promise.all(idsParaBaixa.map(id => 
@@ -879,7 +855,7 @@ export default function DiariasDashboard() {
         
         // 2. Cria uma mensagem detalhada para a auditoria
         const detalhesLog = registroDeletado 
-          ? `Excluiu definitivamente a viagem de ${registroDeletado.nome} (Destino: ${registroDeletado.local_viagem} | R$ ${Number(registroDeletado.valor).toFixed(2)}).`
+          ? `Excluiu a viagem de ${registroDeletado.nome} (Destino: ${registroDeletado.local_viagem} | R$ ${Number(registroDeletado.valor).toFixed(2)}).`
           : `Removeu definitivamente um registo desconhecido do sistema.`;
 
         await registrarLog('EXCLUSÃO', detalhesLog);
@@ -1068,92 +1044,40 @@ export default function DiariasDashboard() {
         </div>
       )}
 
-      {/* --- CABEÇALHO INTELIGENTE E BARRA DE FERRAMENTAS --- */}
-      <nav className={`bg-white border-b fixed w-full z-50 shadow-sm transition-transform duration-300 ${mostrarNav ? 'translate-y-0' : '-translate-y-full'}`}>
-        <div className="max-w-[1600px] mx-auto p-4 flex flex-col gap-3">
+      {/* --- MENU SUPERIOR (NAVBAR) INTELIGENTE E FINO --- */}
+      <nav className="bg-white border-b sticky top-0 z-50 shadow-sm w-full">
+        <div className="max-w-[1600px] mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
           
-          {/* LINHA 1: Título e Ações Globais */}
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-black uppercase italic tracking-tighter text-slate-800">Gestão CSIPRC</h1>
-              <div className="flex items-center gap-2 border-l pl-3 ml-1 border-slate-200">
-                <span className="text-[10px] font-bold text-blue-600 uppercase hidden sm:inline-block">Olá, {usuarioLogado}</span>
-                {isAdmin && <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Admin</span>}
-                <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors">SAIR</button>
-              </div>
-            </div>
-            
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-center">
-                <button onClick={() => setMostrarPortal(true)} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase transition-colors">🔍 Portal MA</button>
-                {isAdmin && (
-                  <>
-                    <button onClick={() => setMostrarGerenciarEquipe(true)} className="bg-slate-100 text-slate-800 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase transition-colors">⚙️ Equipa</button>
-                    <button onClick={abrirPainelLogs} className="bg-slate-800 hover:bg-black text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">🕵️‍♂️ Auditoria</button>
-                    <button onClick={() => baixarRelatorioPendentes('SEI')} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 SEI</button>
-                    <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors">📥 SALÁRIO</button>
-                  </>
-                )}
+          <div className="flex items-center justify-between w-full sm:w-auto">
+            <h1 className="text-lg sm:text-xl font-black uppercase italic tracking-tighter text-slate-800">Gestão CSIPRC</h1>
+            <div className="flex items-center gap-2 border-l pl-3 ml-2 border-slate-200">
+              <span className="text-[10px] font-bold text-blue-600 uppercase truncate max-w-[120px] sm:max-w-[200px]" title={usuarioLogado}>Olá, {usuarioLogado}</span>
+              {isAdmin && <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider hidden sm:inline-block">Admin</span>}
+              <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 px-2 py-1 rounded shrink-0">SAIR</button>
             </div>
           </div>
             
-          {/* LINHA 2: Barra de Filtros Unificada */}
-          <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 flex flex-col xl:flex-row items-center gap-3 w-full">
-            
-            {/* Busca */}
-            <div className="flex-1 w-full xl:min-w-[300px]">
-              <input type="text" placeholder="🔍 Buscar Servidor ou Destino..." className="w-full bg-white border border-slate-200 py-2 px-3 rounded-lg text-[11px] font-medium outline-none focus:ring-2 focus:ring-blue-500 text-slate-900" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)} />
-            </div>
-
-            {/* Controles e Filtros */}
-            <div className="flex flex-wrap items-center justify-center gap-2 w-full xl:w-auto">
-              
-              {/* Filtro de Método */}
-              <div className="bg-white p-1 rounded-lg flex shadow-sm border border-slate-200">
-                {['TODOS', 'SEI', 'CONTA SALARIO'].map(f => (
-                  <button key={f} onClick={() => setFiltroMetodo(f)} className={`px-3 py-1.5 rounded-md text-[9px] font-black transition-colors ${filtroMetodo === f ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
-                    {f === 'CONTA SALARIO' ? 'SALÁRIO' : f}
-                  </button>
-                ))}
-              </div>
-
-              {/* Filtro de Status */}
-              <div className="bg-white p-1 rounded-lg flex shadow-sm border border-slate-200">
-                <button onClick={() => setFiltroStatus('PENDENTE')} className={`px-3 py-1.5 rounded-md text-[9px] font-black transition-colors flex gap-1 ${filtroStatus === 'PENDENTE' ? 'bg-red-500 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>⏳ PENDENTES</button>
-                <button onClick={() => setFiltroStatus('PAGO')} className={`px-3 py-1.5 rounded-md text-[9px] font-black transition-colors flex gap-1 ${filtroStatus === 'PAGO' ? 'bg-green-500 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>✅ PAGOS</button>
-                <button onClick={() => setFiltroStatus('TODOS')} className={`px-3 py-1.5 rounded-md text-[9px] font-black transition-colors ${filtroStatus === 'TODOS' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>TUDO</button>
-              </div>
-
-              {/* Filtro de Data */}
-              <div className="bg-white p-1 rounded-lg flex items-center shadow-sm border border-slate-200 px-2 gap-1">
-                <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-transparent text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
-                <span className="text-[9px] font-black text-slate-400">ATÉ</span>
-                <input type="date" value={dataFimRelatorio} onChange={(e) => setDataFimRelatorio(e.target.value)} className="bg-transparent text-[10px] font-bold text-slate-700 outline-none cursor-pointer" />
-                
-                {/* Ações rápidas de data embutidas */}
-                <div className="flex border-l border-slate-200 ml-1 pl-1 gap-0.5 hidden md:flex">
-                  <button onClick={() => aplicarFiltroRapido('HOJE')} className="text-[8px] font-bold text-slate-500 hover:bg-slate-100 px-2 py-1 rounded">HOJE</button>
-                  <button onClick={() => aplicarFiltroRapido('ESTE_MES')} className="text-[8px] font-bold text-slate-500 hover:bg-slate-100 px-2 py-1 rounded">MÊS</button>
-                  <button onClick={() => { setDataInicioRelatorio(''); setDataFimRelatorio(''); mostrarToast('Filtro de data limpo', 'info'); }} className="text-[8px] font-black text-red-400 hover:bg-red-50 px-2 py-1 rounded" title="Limpar Período">LIMPAR</button>
-                </div>
-              </div>
-
-              {/* Botão de Ordem */}
-              <button onClick={() => setOrdemData(prev => prev === 'DESC' ? 'ASC' : 'DESC')} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[9px] font-black transition-colors shadow-sm hover:bg-blue-50 text-slate-700 flex items-center gap-1 h-[32px]">
-                {ordemData === 'ASC' ? '⬆️ ANTIGAS' : '⬇️ RECENTES'}
-              </button>
-
-            </div>
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto pb-1 sm:pb-0">
+              <button onClick={() => setMostrarPortal(true)} className="shrink-0 bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase transition-colors">🔍 Portal MA</button>
+              {isAdmin && (
+                <>
+                  <button onClick={() => setMostrarGerenciarEquipe(true)} className="shrink-0 bg-slate-900 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md hover:bg-black transition-colors uppercase">⚙️ Equipa</button>
+                  <button onClick={abrirPainelLogs} className="shrink-0 bg-slate-800 hover:bg-black text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors uppercase">🕵️‍♂️ Auditoria</button>
+                  <button onClick={() => baixarRelatorioPendentes('SEI')} className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors uppercase">📥 SEI</button>
+                  <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors uppercase">📥 SALÁRIO</button>
+                </>
+              )}
           </div>
+
         </div>
       </nav>
 
       {/* --- NOVO LAYOUT PRINCIPAL: DASHBOARD COM BARRA LATERAL ESQUERDA (SIDEBAR) --- */}
-      {/* Adicionado paddingTop para compensar a nav fixa que não empurra o conteúdo */}
-      <main className="max-w-[1600px] mx-auto p-4 lg:p-6 w-full flex flex-col lg:flex-row gap-6 lg:gap-8 items-start pt-[160px] md:pt-[130px]">
+      <main className="max-w-[1600px] mx-auto p-4 lg:p-6 w-full flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
         
         {/* --- LADO ESQUERDO: BARRA LATERAL FIXA (FORMULÁRIO DE CADASTRO) --- */}
-        <aside className="w-full lg:w-[350px] xl:w-[400px] shrink-0 lg:sticky lg:top-4 z-10 transition-all">
-          <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 flex flex-col h-auto lg:h-[calc(100vh-2rem)]">
+        <aside className="w-full lg:w-[320px] xl:w-[380px] shrink-0 lg:sticky lg:top-[80px] z-40">
+          <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 flex flex-col h-auto lg:h-[calc(100vh-6.5rem)]">
             <h2 className="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest shrink-0">Novo Registo</h2>
             <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
               <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
@@ -1190,8 +1114,70 @@ export default function DiariasDashboard() {
           </div>
         </aside>
 
-        {/* --- LADO DIREITO: DADOS CADASTRADOS, GRÁFICOS E LISTAS --- */}
+        {/* --- LADO DIREITO: FILTROS, GRÁFICOS E LISTAS --- */}
         <section className="flex-1 w-full min-w-0 flex flex-col gap-6">
+
+          {/* --- FILTROS E BUSCA (MOVIDOS PARA CÁ PARA NÃO TRAVAR O TOPO) --- */}
+          <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 w-full">
+             <div className="flex justify-between items-center">
+               <h3 className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                 🔍 Filtros e Buscas
+               </h3>
+               <button
+                 onClick={() => setFiltrosAbertos(!filtrosAbertos)}
+                 className="text-[9px] sm:text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors uppercase"
+               >
+                 {filtrosAbertos ? 'Ocultar ⬆️' : 'Mostrar ⬇️'}
+               </button>
+             </div>
+
+             <div className={`transition-all duration-300 overflow-hidden flex flex-col gap-4 ${filtrosAbertos ? 'max-h-[1000px] opacity-100 mt-4' : 'max-h-0 opacity-0 m-0'}`}>
+                {/* Input de Busca */}
+                <input type="text" placeholder="BUSCAR SERVIDOR OU DESTINO..." className="w-full bg-slate-50 border border-slate-200 p-3 sm:p-4 rounded-xl text-xs sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 font-bold uppercase" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)} />
+
+                {/* Controles de Filtro */}
+                <div className="flex flex-col xl:flex-row gap-3">
+                   {/* Metodo e Status */}
+                   <div className="flex flex-wrap gap-2 flex-1">
+                      {/* Metodos */}
+                      <div className="flex bg-slate-50 border border-slate-200 p-1 rounded-xl">
+                        {['TODOS', 'SEI', 'CONTA SALARIO'].map(f => (
+                          <button key={f} onClick={() => setFiltroMetodo(f)} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all ${filtroMetodo === f ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>{f === 'CONTA SALARIO' ? 'SALÁRIO' : f}</button>
+                        ))}
+                      </div>
+
+                      {/* Status */}
+                      <div className="flex bg-slate-50 border border-slate-200 p-1 rounded-xl">
+                        <button onClick={() => setFiltroStatus('PENDENTE')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 ${filtroStatus === 'PENDENTE' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>⏳ PENDENTES</button>
+                        <button onClick={() => setFiltroStatus('PAGO')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 ${filtroStatus === 'PAGO' ? 'bg-green-500 text-white shadow-sm' : 'text-slate-500 hover:bg-green-50 hover:text-green-600'}`}>✅ PAGOS</button>
+                        <button onClick={() => setFiltroStatus('TODOS')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all ${filtroStatus === 'TODOS' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>VER TUDO</button>
+                      </div>
+                      
+                      {/* Order */}
+                      <button onClick={() => setOrdemData(prev => prev === 'DESC' ? 'ASC' : 'DESC')} className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-[9px] font-black transition-all text-blue-700 hover:bg-blue-100 flex items-center gap-1 uppercase">
+                        {ordemData === 'ASC' ? '⬆️ ANTIGAS' : '⬇️ RECENTES'}
+                      </button>
+                   </div>
+
+                   {/* Datas */}
+                   <div className="flex flex-col gap-2 w-full xl:w-auto">
+                      <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                         <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-transparent p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer flex-1" />
+                         <span className="text-[9px] font-black text-slate-300 uppercase">ATÉ</span>
+                         <input type="date" value={dataFimRelatorio} onChange={(e) => setDataFimRelatorio(e.target.value)} className="bg-transparent p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer flex-1" />
+                         {(dataInicioRelatorio || dataFimRelatorio) && (
+                           <button onClick={() => { setDataInicioRelatorio(''); setDataFimRelatorio(''); mostrarToast('Filtro limpo', 'info'); }} className="text-[12px] text-red-400 hover:text-red-600 px-2" title="Limpar Período">✖</button>
+                         )}
+                      </div>
+                      <div className="flex gap-1 justify-between">
+                         <button onClick={() => aplicarFiltroRapido('HOJE')} className="flex-1 text-[8px] bg-slate-50 border border-slate-200 hover:bg-blue-100 text-slate-500 hover:text-blue-700 py-1.5 rounded-lg font-bold uppercase transition-colors">Hoje</button>
+                         <button onClick={() => aplicarFiltroRapido('7DIAS')} className="flex-1 text-[8px] bg-slate-50 border border-slate-200 hover:bg-blue-100 text-slate-500 hover:text-blue-700 py-1.5 rounded-lg font-bold uppercase transition-colors">7 Dias</button>
+                         <button onClick={() => aplicarFiltroRapido('ESTE_MES')} className="flex-1 text-[8px] bg-slate-50 border border-slate-200 hover:bg-blue-100 text-slate-500 hover:text-blue-700 py-1.5 rounded-lg font-bold uppercase transition-colors">Este Mês</button>
+                      </div>
+                   </div>
+                </div>
+             </div>
+          </div>
           
           {isAdmin && (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -1311,6 +1297,7 @@ export default function DiariasDashboard() {
                                <input type="file" className="hidden" accept=".xlsx, .xls, .pdf" disabled={uploadingTabela === tabela.key} onChange={(e) => handleUploadComprovante(e, tabela.ids, tabela.key)} />
                              </label>
                           )}
+                          {/* BOTÃO ALTERADO PARA ABRIR O MODAL DE DATA */}
                           <button onClick={() => abrirModalBaixa(tabela.ids)} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
                             ✓ Marcar Tabela Paga
                           </button>
