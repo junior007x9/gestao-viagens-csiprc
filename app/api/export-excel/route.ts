@@ -23,37 +23,53 @@ export async function POST(req: Request) {
     // Pega a altura da linha 10 como base (ou 25 se falhar)
     const alturaBase = sheet.row(10).height() || 25;
 
-    // --- CORREÇÃO CRÍTICA (FIM DO DESPERDÍCIO DE PÁGINAS) ---
-    // Em vez de deixar visível, OCULTAMOS todas as linhas vazias.
-    // O Excel só vai imprimir o que estiver visível!
+    // --- FORÇANDO LARGURA DAS COLUNAS PARA EVITAR O ERRO '########' ---
+    if (metodoSelecionado === 'CONTA SALARIO') {
+        sheet.column("A").width(5);   // Nº
+        sheet.column("B").width(38);  // SERVIDORES
+        sheet.column("C").width(28);  // CARGO
+        sheet.column("D").width(18);  // DATA DA VIAGEM
+        sheet.column("E").width(45);  // ADOLESCENTE / MOTIVO
+        sheet.column("F").width(20);  // OBJETIVO 
+        sheet.column("G").width(28);  // DESTINO
+        sheet.column("H").width(14);  // QUANTIDADE
+        sheet.column("I").width(18);  // VALOR (Alargado para caber o R$)
+    }
+
+    // --- DIFERENCIAÇÃO DE COLUNAS ---
+    const colunas = metodoSelecionado === 'SEI' 
+        ? ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] 
+        : ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+
+    // 3. Oculta linhas vazias e limpa dados
     for (let r = 10; r <= 1000; r++) {
         const linha = sheet.row(r);
-        linha.hidden(true); // <--- DEIXA A LINHA OCULTA POR PADRÃO
-        linha.height(alturaBase); // Força altura padrão
+        linha.hidden(true); // Deixa oculto por padrão
+        linha.height(alturaBase); 
         
-        ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(c => {
+        colunas.forEach(c => {
             const cell = sheet.cell(`${c}${r}`);
-            cell.value(undefined); // Limpa valor
-            cell.style("border", undefined); // Limpa bordas do modelo
-            cell.style("fill", undefined); // Limpa preenchimento do modelo
+            cell.value(undefined); 
+            cell.style("border", undefined); 
+            cell.style("fill", undefined); 
         });
     }
 
-    // 3. Salvar Estilos da Linha 10 antes de alterá-la
+    // 4. Salvar Estilos da Linha 10 (Template)
     const estilosBase: any = {};
     const estilosParaCopiar = [
       "bold", "italic", "fontFamily", "fontSize", 
-      "horizontalAlignment", "verticalAlignment", "wrapText", "numberFormat"
-    ];
+      "horizontalAlignment", "verticalAlignment", "wrapText"
+    ]; // Removi o numberFormat para forçarmos manualmente!
     
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
+    colunas.forEach(col => {
       estilosBase[col] = {};
       estilosParaCopiar.forEach(estilo => {
          estilosBase[col][estilo] = sheet.cell(`${col}10`).style(estilo);
       });
     });
 
-    // 4. Filtrar e Agrupar os Dados
+    // 5. Filtrar e Agrupar os Dados
     const diariasFiltradas = todasDiarias.filter((d: any) => d.metodo_pagamento === metodoSelecionado);
 
     const gruposPorData: any = {};
@@ -85,43 +101,40 @@ export async function POST(req: Request) {
        cell.style("border", true);
     }
 
-    // 5. Preenchimento da Tabela
+    // 6. Preenchimento da Tabela
     for (const dataExp of datasOrdenadas) {
         const pessoas = gruposPorData[dataExp];
 
-        // 5.1 Insere a faixa (banner) avisando a data
+        // 6.1 Banners de Data
         if (dataExp !== 'NOVAS') {
             const dataFormatada = dataExp.split('-').reverse().join('/');
-            sheet.row(row).hidden(false).height(30); // Desoculta apenas esta linha
+            sheet.row(row).hidden(false).height(30); 
             
-            ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
-                sheet.cell(`${col}${row}`).style({ fill: 'FFF9C4', border: true });
-            });
+            colunas.forEach(col => { sheet.cell(`${col}${row}`).style({ fill: 'FFF9C4', border: true }); });
             sheet.cell(`B${row}`).value(`⚠️ TABELA GERADA DIA ${dataFormatada}`).style({ bold: true, fontColor: '000000', horizontalAlignment: 'left', verticalAlignment: 'center' });
             row++;
         } else if (datasOrdenadas.length > 1) {
-             sheet.row(row).hidden(false).height(30); // Desoculta apenas esta linha
+             sheet.row(row).hidden(false).height(30); 
              
-             ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
-                sheet.cell(`${col}${row}`).style({ fill: 'E8F5E9', border: true });
-             });
+             colunas.forEach(col => { sheet.cell(`${col}${row}`).style({ fill: 'E8F5E9', border: true }); });
              sheet.cell(`B${row}`).value(`🆕 NOVAS DIÁRIAS`).style({ bold: true, fontColor: '000000', horizontalAlignment: 'left', verticalAlignment: 'center' });
              row++;
         }
 
-        // 5.2 Itera sobre as Pessoas
+        // 6.2 Itera sobre as Pessoas
         for (const [nome, viagens] of Object.entries(pessoas)) {
              let subtotalValor = 0;
              let subtotalQtd = 0;
              const arrayViagens = viagens as any[];
+             const linhaInicioMesclagem = row; // <-- SALVA A LINHA INICIAL PARA MESCLAR
              
              arrayViagens.forEach((item, indexViagem) => {
                  ultimaLinhaDados = row;
                  const isFirst = indexViagem === 0;
 
-                 sheet.row(row).hidden(false).height(alturaBase); // Desoculta apenas a linha sendo usada
+                 sheet.row(row).hidden(false).height(alturaBase); 
                  
-                 ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => aplicarEstiloBase(row, col));
+                 colunas.forEach(col => aplicarEstiloBase(row, col));
 
                  let dataViagem = item.data_viagem;
                  if (dataViagem && typeof dataViagem === 'string') {
@@ -129,10 +142,8 @@ export async function POST(req: Request) {
                    if(parts.length === 3) dataViagem = `${parts[2]}/${parts[1]}/${parts[0]}`;
                  }
 
-                 const txtPessoa = isFirst ? item.nome : '"';
-                 const txtCargo = isFirst ? item.cargo : '"';
-
                  if (metodoSelecionado === 'SEI') {
+                    const txtPessoa = isFirst ? item.nome : '"';
                     sheet.cell(`A${row}`).value(indexGeral++);
                     sheet.cell(`B${row}`).value(txtPessoa).style({ horizontalAlignment: isFirst ? 'left' : 'center', fontColor: isFirst ? '000000' : '888888' });
                     sheet.cell(`C${row}`).value(dataViagem || "");
@@ -143,13 +154,16 @@ export async function POST(req: Request) {
                     sheet.cell(`H${row}`).value(item.pago ? 'PAGO' : 'PENDENTE');
                  } else {
                     sheet.cell(`A${row}`).value(indexGeral++);
-                    sheet.cell(`B${row}`).value(txtPessoa).style({ horizontalAlignment: isFirst ? 'left' : 'center', fontColor: isFirst ? '000000' : '888888' });
-                    sheet.cell(`C${row}`).value(txtCargo).style({ horizontalAlignment: isFirst ? 'left' : 'center', fontColor: isFirst ? '000000' : '888888' });
+                    sheet.cell(`B${row}`).value(item.nome).style({ horizontalAlignment: 'left', verticalAlignment: 'center' });
+                    sheet.cell(`C${row}`).value(item.cargo).style({ horizontalAlignment: 'left', verticalAlignment: 'center' });
                     sheet.cell(`D${row}`).value(dataViagem || "");
                     sheet.cell(`E${row}`).value(item.adolescente_nome || "");
-                    sheet.cell(`F${row}`).value(item.local_viagem || "");
-                    sheet.cell(`G${row}`).value(Number(item.quantidade) || 1);
-                    sheet.cell(`H${row}`).value(Number(item.valor) || 0);
+                    sheet.cell(`F${row}`).value(item.objetivo || ""); // <-- CAMPO OBJETIVO
+                    sheet.cell(`G${row}`).value(item.local_viagem || "");
+                    
+                    // FORÇANDO A FORMATAÇÃO CORRETA DE NÚMERO E MOEDA
+                    sheet.cell(`H${row}`).value(Number(item.quantidade) || 1).style("numberFormat", "0");
+                    sheet.cell(`I${row}`).value(Number(item.valor) || 0).style("numberFormat", "R$ #,##0.00");
                     
                     subtotalValor += Number(item.valor) || 0;
                     subtotalQtd += Number(item.quantidade) || 1;
@@ -157,41 +171,47 @@ export async function POST(req: Request) {
                  row++;
              });
 
-             // 5.3 SUBTOTAL
+             // --- MÁGICA DO EXCEL: MESCLAR CÉLULAS (MERGE) PARA SALÁRIO ---
+             if (metodoSelecionado === 'CONTA SALARIO' && arrayViagens.length > 1) {
+                 sheet.range(`B${linhaInicioMesclagem}:B${row - 1}`).merged(true);
+                 sheet.range(`C${linhaInicioMesclagem}:C${row - 1}`).merged(true);
+             }
+
+             // 6.3 SUBTOTAL
              if (arrayViagens.length > 1) {
                  ultimaLinhaDados = row;
-                 sheet.row(row).hidden(false).height(alturaBase); // Desoculta a linha do subtotal
+                 sheet.row(row).hidden(false).height(alturaBase); 
                  
-                 ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
+                 colunas.forEach(col => {
                      sheet.cell(`${col}${row}`).style({ fill: 'F3F4F6', border: true });
                  });
 
                  if (metodoSelecionado === 'SEI') {
                      sheet.cell(`G${row}`).value(`SUBTOTAL - ${nome}`).style({ bold: true, horizontalAlignment: 'right' });
-                     sheet.cell(`H${row}`).value(arrayViagens.length).style({ bold: true, horizontalAlignment: 'center' });
+                     sheet.cell(`H${row}`).value(arrayViagens.length).style({ bold: true, horizontalAlignment: 'center', numberFormat: "0" });
                  } else {
-                     sheet.cell(`F${row}`).value(`SUBTOTAL - ${nome}`).style({ bold: true, horizontalAlignment: 'right' });
-                     sheet.cell(`G${row}`).value(subtotalQtd).style({ bold: true, horizontalAlignment: 'center' });
-                     sheet.cell(`H${row}`).value(subtotalValor).style({ bold: true, numberFormat: "R$ #,##0.00" });
+                     sheet.cell(`G${row}`).value(`SUBTOTAL - ${nome}`).style({ bold: true, horizontalAlignment: 'right' });
+                     sheet.cell(`H${row}`).value(subtotalQtd).style({ bold: true, horizontalAlignment: 'center', numberFormat: "0" });
+                     sheet.cell(`I${row}`).value(subtotalValor).style({ bold: true, numberFormat: "R$ #,##0.00" });
                  }
                  row++;
              }
         }
     }
 
-    // 6. Cálculo do TOTAL GERAL
+    // 7. Cálculo do TOTAL GERAL
     if (ultimaLinhaDados < 10) ultimaLinhaDados = 10;
     const linhaTotal = ultimaLinhaDados + 2;
 
-    sheet.row(linhaTotal).hidden(false).height(alturaBase); // Desoculta a linha do total geral
+    sheet.row(linhaTotal).hidden(false).height(alturaBase); 
 
     if (metodoSelecionado === 'SEI') {
       sheet.cell(`G${linhaTotal}`).value("TOTAL GERAL:").style({ bold: true, horizontalAlignment: 'right' });
-      sheet.cell(`H${linhaTotal}`).value(diariasFiltradas.length).style({ bold: true, horizontalAlignment: 'left' });
+      sheet.cell(`H${linhaTotal}`).value(diariasFiltradas.length).style({ bold: true, horizontalAlignment: 'left', numberFormat: "0" });
     } else if (diariasFiltradas.length > 0) {
-      sheet.cell(`G${linhaTotal}`).value("TOTAL GERAL:").style({ bold: true, horizontalAlignment: 'right' });
+      sheet.cell(`H${linhaTotal}`).value("TOTAL GERAL:").style({ bold: true, horizontalAlignment: 'right' });
       const valorTotal = diariasFiltradas.reduce((acc: number, curr: any) => acc + (Number(curr.valor) || 0), 0);
-      sheet.cell(`H${linhaTotal}`).value(valorTotal).style({ bold: true, numberFormat: "R$ #,##0.00" });
+      sheet.cell(`I${linhaTotal}`).value(valorTotal).style({ bold: true, numberFormat: "R$ #,##0.00" });
     }
 
     const buffer = await workbook.outputAsync();

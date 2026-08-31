@@ -119,6 +119,22 @@ export default function DiariasDashboard() {
   
   // --- ESTADO PARA OCULTAR/MOSTRAR OS FILTROS ---
   const [filtrosAbertos, setFiltrosAbertos] = useState(true)
+  const [isScrolled, setIsScrolled] = useState(false)
+
+  // --- EFEITO DE SCROLL ---
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 40) {
+        setIsScrolled(true);
+        setFiltrosAbertos(false);
+      } else {
+        setIsScrolled(false);
+        setFiltrosAbertos(true);
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // --- ESTADO DA PAGINAÇÃO E TABELAS PAGAS ---
   const [limiteVisivel, setLimiteVisivel] = useState(50)
@@ -136,6 +152,7 @@ export default function DiariasDashboard() {
   const [formNome, setFormNome] = useState('')
   const [formCargo, setFormCargo] = useState('')
   const [formLocal, setFormLocal] = useState('')
+  const [formObjetivo, setFormObjetivo] = useState('') // <-- NOVO ESTADO OBJETIVO
 
   const [idEditando, setIdEditando] = useState<string | null>(null)
   const [dadosEditados, setDadosEditados] = useState<any>({})
@@ -201,6 +218,7 @@ export default function DiariasDashboard() {
             <ul>
               <li><strong>Servidor(a):</strong> <span class="destaque">${diaria.nome}</span></li>
               <li><strong>Cargo:</strong> ${diaria.cargo || 'Não informado'}</li>
+              <li><strong>Objetivo:</strong> ${diaria.objetivo || 'Não informado'}</li>
               <li><strong>Destino:</strong> ${diaria.local_viagem}</li>
               <li><strong>Motivo / Adolescente:</strong> ${diaria.adolescente_nome}</li>
               <li><strong>Data da Viagem:</strong> ${dataViagem}</li>
@@ -637,6 +655,7 @@ export default function DiariasDashboard() {
     
     try {
       const agora = new Date().toISOString();
+      // Ajusta a data para evitar problemas de fuso horário
       const dataPagamentoFormatada = new Date(`${dataBaixa}T12:00:00Z`).toISOString();
 
       await Promise.all(idsParaBaixa.map(id => 
@@ -682,7 +701,8 @@ export default function DiariasDashboard() {
   }
 
   const diariasFiltradas = diarias.filter(d => {
-    const busca = ((d.nome || "") + (d.adolescente_nome || "") + (d.numero_processo || "") + (d.local_viagem || "")).toLowerCase()
+    // --- ADICIONADO OBJETIVO NA BUSCA ---
+    const busca = ((d.nome || "") + (d.adolescente_nome || "") + (d.numero_processo || "") + (d.local_viagem || "") + (d.objetivo || "")).toLowerCase()
     const matchesPesquisa = busca.includes(pesquisa.toLowerCase())
     const matchesMetodo = filtroMetodo === 'TODOS' || d.metodo_pagamento === filtroMetodo
     let matchesStatus = true;
@@ -701,7 +721,8 @@ export default function DiariasDashboard() {
   })
 
   const diariasParaGraficos = diarias.filter(d => {
-    const busca = ((d.nome || "") + (d.adolescente_nome || "") + (d.numero_processo || "") + (d.local_viagem || "")).toLowerCase()
+    // --- ADICIONADO OBJETIVO NA BUSCA ---
+    const busca = ((d.nome || "") + (d.adolescente_nome || "") + (d.numero_processo || "") + (d.local_viagem || "") + (d.objetivo || "")).toLowerCase()
     const matchesPesquisa = busca.includes(pesquisa.toLowerCase())
     const matchesMetodo = filtroMetodo === 'TODOS' || d.metodo_pagamento === filtroMetodo
     let matchesPeriodo = true;
@@ -754,6 +775,7 @@ export default function DiariasDashboard() {
     const localFinal = formLocal || (formData.get('local') as string)
     const adolescenteFinal = formData.get('adolescente_nome') as string
     const dataFinal = formData.get('data') as string
+    const objetivoFinal = formObjetivo || (formData.get('objetivo') as string) // <-- RESGATANDO OBJETIVO
 
     // --- TRAVA DE SEGURANÇA: VERIFICAR DUPLICIDADE ---
     const diariaDuplicada = diarias.find(d => 
@@ -791,6 +813,7 @@ export default function DiariasDashboard() {
         nome: nomeFinal.toUpperCase(),
         cargo: cargoFinal.toUpperCase(),
         adolescente_nome: adolescenteFinal.toUpperCase(),
+        objetivo: objetivoFinal.toUpperCase(), // <-- SALVANDO OBJETIVO
         data_viagem: dataFinal,
         local_viagem: localFinal.toUpperCase(),
         valor: valorCorrigido,
@@ -813,7 +836,7 @@ export default function DiariasDashboard() {
         setFormNome(""); 
         mostrarToast("Salvo! Dados mantidos para o próximo.", "sucesso");
       } else {
-        form.reset(); setFormNome(""); setFormCargo(""); setFormLocal(""); 
+        form.reset(); setFormNome(""); setFormCargo(""); setFormLocal(""); setFormObjetivo(""); // <-- LIMPANDO OBJETIVO
         mostrarToast("Nova diária cadastrada com sucesso!", "sucesso");
       }
     } catch (err) { 
@@ -1045,30 +1068,90 @@ export default function DiariasDashboard() {
       )}
 
       {/* --- MENU SUPERIOR (NAVBAR) INTELIGENTE E FINO --- */}
-      <nav className="bg-white border-b sticky top-0 z-50 shadow-sm w-full">
-        <div className="max-w-[1600px] mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <nav className={`bg-white border-b sticky top-0 z-50 w-full transition-all duration-300 ${isScrolled ? 'shadow-md py-2' : 'shadow-sm py-4'}`}>
+        <div className="max-w-[1600px] mx-auto px-4 flex flex-col gap-3">
           
-          <div className="flex items-center justify-between w-full sm:w-auto">
-            <h1 className="text-lg sm:text-xl font-black uppercase italic tracking-tighter text-slate-800">Gestão CSIPRC</h1>
-            <div className="flex items-center gap-2 border-l pl-3 ml-2 border-slate-200">
-              <span className="text-[10px] font-bold text-blue-600 uppercase truncate max-w-[120px] sm:max-w-[200px]" title={usuarioLogado}>Olá, {usuarioLogado}</span>
-              {isAdmin && <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider hidden sm:inline-block">Admin</span>}
-              <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 px-2 py-1 rounded shrink-0">SAIR</button>
+          {/* LINHA 1: Cabeçalho, Identificação e Botões Principais */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <h1 className={`font-black uppercase italic tracking-tighter text-slate-800 transition-all ${isScrolled ? 'text-lg' : 'text-xl sm:text-2xl'}`}>Gestão CSIPRC</h1>
+              <div className="flex items-center gap-2 border-l pl-3 ml-2 border-slate-200">
+                <span className="text-[10px] font-bold text-blue-600 uppercase truncate max-w-[120px] sm:max-w-[200px]" title={usuarioLogado}>Olá, {usuarioLogado}</span>
+                {isAdmin && <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider hidden sm:inline-block">Admin</span>}
+                <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 px-2 py-1 rounded shrink-0">SAIR</button>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                {/* Botão Responsável por Mostrar/Ocultar os Filtros */}
+                <button 
+                  onClick={() => setFiltrosAbertos(!filtrosAbertos)} 
+                  className={`flex items-center gap-1 px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-colors ${filtrosAbertos ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  {filtrosAbertos ? 'Esconder Filtros ⬆️' : 'Mostrar Filtros ⬇️'}
+                </button>
+
+                <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+
+                <button onClick={() => setMostrarPortal(true)} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black hover:bg-slate-200 uppercase text-center hidden sm:block">🔍 Portal</button>
+                {isAdmin && (
+                  <>
+                    <button onClick={abrirPainelLogs} className="bg-slate-800 hover:bg-black text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors text-center">🕵️‍♂️ AUDITORIA</button>
+                    <button onClick={() => baixarRelatorioPendentes('SEI')} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors text-center">📥 SEI</button>
+                    <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors text-center">📥 SALÁRIO</button>
+                  </>
+                )}
             </div>
           </div>
-            
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto pb-1 sm:pb-0">
-              <button onClick={() => setMostrarPortal(true)} className="shrink-0 bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black border hover:bg-slate-200 uppercase transition-colors">🔍 Portal MA</button>
-              {isAdmin && (
-                <>
-                  <button onClick={() => setMostrarGerenciarEquipe(true)} className="shrink-0 bg-slate-900 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md hover:bg-black transition-colors uppercase">⚙️ Equipa</button>
-                  <button onClick={abrirPainelLogs} className="shrink-0 bg-slate-800 hover:bg-black text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors uppercase">🕵️‍♂️ Auditoria</button>
-                  <button onClick={() => baixarRelatorioPendentes('SEI')} className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors uppercase">📥 SEI</button>
-                  <button onClick={() => baixarRelatorioPendentes('CONTA SALARIO')} className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold shadow-md transition-colors uppercase">📥 SALÁRIO</button>
-                </>
-              )}
-          </div>
+          
+          {/* LINHA 2: Bloco de Filtros Agrupados (Recolhe no Scroll) */}
+          <div className={`transition-all duration-300 overflow-hidden origin-top ${filtrosAbertos ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+            <div className="flex flex-col xl:flex-row gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+              
+              {/* Busca e Botão Equipe */}
+              <div className="flex-1 flex gap-2">
+                <input type="text" placeholder="🔍 Buscar Servidor ou Destino..." className="flex-1 bg-white border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 font-bold uppercase" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)} />
+                {isAdmin && <button onClick={() => setMostrarGerenciarEquipe(true)} className="shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black transition-all bg-slate-900 text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 uppercase">⚙️ Equipa</button>}
+              </div>
 
+              {/* Botões de Filtro: Método, Status e Ordenação */}
+              <div className="flex flex-wrap gap-2">
+                <div className="flex bg-white border border-slate-200 p-1 rounded-xl">
+                  {['TODOS', 'SEI', 'CONTA SALARIO'].map(f => (
+                    <button key={f} onClick={() => setFiltroMetodo(f)} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all ${filtroMetodo === f ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>{f === 'CONTA SALARIO' ? 'SALÁRIO' : f}</button>
+                  ))}
+                </div>
+
+                <div className="flex bg-white border border-slate-200 p-1 rounded-xl">
+                  <button onClick={() => setFiltroStatus('PENDENTE')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 ${filtroStatus === 'PENDENTE' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>⏳ PENDENTES</button>
+                  <button onClick={() => setFiltroStatus('PAGO')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 ${filtroStatus === 'PAGO' ? 'bg-green-500 text-white shadow-sm' : 'text-slate-500 hover:bg-green-50 hover:text-green-600'}`}>✅ PAGOS</button>
+                  <button onClick={() => setFiltroStatus('TODOS')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all ${filtroStatus === 'TODOS' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>VER TUDO</button>
+                </div>
+                
+                <button onClick={() => setOrdemData(prev => prev === 'DESC' ? 'ASC' : 'DESC')} className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-[9px] font-black transition-all text-blue-700 hover:bg-blue-50 flex items-center gap-1 uppercase">
+                  {ordemData === 'ASC' ? '⬆️ ANTIGAS' : '⬇️ RECENTES'}
+                </button>
+              </div>
+
+              {/* Filtros de Data (De/Até e Botões Rápidos) */}
+              <div className="flex flex-col gap-1 w-full xl:w-auto">
+                <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200">
+                  <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-transparent p-1 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer flex-1" />
+                  <span className="text-[9px] font-black text-slate-300 uppercase">ATÉ</span>
+                  <input type="date" value={dataFimRelatorio} onChange={(e) => setDataFimRelatorio(e.target.value)} className="bg-transparent p-1 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer flex-1" />
+                  {(dataInicioRelatorio || dataFimRelatorio) && (
+                    <button onClick={() => { setDataInicioRelatorio(''); setDataFimRelatorio(''); mostrarToast('Filtro limpo', 'info'); }} className="text-[12px] text-red-400 hover:text-red-600 px-2" title="Limpar Período">✖</button>
+                  )}
+                </div>
+                <div className="flex gap-1 justify-between">
+                  <button onClick={() => aplicarFiltroRapido('HOJE')} className="flex-1 text-[8px] bg-white border border-slate-200 hover:bg-blue-50 text-slate-500 hover:text-blue-700 py-1 rounded font-bold uppercase transition-colors">Hoje</button>
+                  <button onClick={() => aplicarFiltroRapido('7DIAS')} className="flex-1 text-[8px] bg-white border border-slate-200 hover:bg-blue-50 text-slate-500 hover:text-blue-700 py-1 rounded font-bold uppercase transition-colors">7 Dias</button>
+                  <button onClick={() => aplicarFiltroRapido('ESTE_MES')} className="flex-1 text-[8px] bg-white border border-slate-200 hover:bg-blue-50 text-slate-500 hover:text-blue-700 py-1 rounded font-bold uppercase transition-colors">Mês</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
         </div>
       </nav>
 
@@ -1084,6 +1167,9 @@ export default function DiariasDashboard() {
                 <AutocompleteInput name="nome" placeholder="Nome do Servidor" value={formNome} onChange={(e: any) => { setFormNome(e.target.value); const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase()); if(serv && serv.cargo) setFormCargo(serv.cargo); }} sugestoes={sugestoesNomes} required />
                 {metodoSelecionado === 'CONTA SALARIO' && <AutocompleteInput name="cargo" placeholder="Cargo" value={formCargo} onChange={(e: any) => setFormCargo(e.target.value)} sugestoes={sugestoesCargos} />}
                 <input name="adolescente_nome" placeholder="Adolescente / Motivo" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
+                
+                {/* --- CAMPO OBJETIVO ADICIONADO AQUI --- */}
+                <input name="objetivo" placeholder="Objetivo (Ex: Transferência)" value={formObjetivo} onChange={(e) => setFormObjetivo(e.target.value.toUpperCase())} className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
                 
                 <div className="grid grid-cols-2 gap-2">
                   <input name="data" type="date" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
@@ -1114,70 +1200,8 @@ export default function DiariasDashboard() {
           </div>
         </aside>
 
-        {/* --- LADO DIREITO: FILTROS, GRÁFICOS E LISTAS --- */}
+        {/* --- LADO DIREITO: DADOS CADASTRADOS, GRÁFICOS E LISTAS --- */}
         <section className="flex-1 w-full min-w-0 flex flex-col gap-6">
-
-          {/* --- FILTROS E BUSCA (MOVIDOS PARA CÁ PARA NÃO TRAVAR O TOPO) --- */}
-          <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 w-full">
-             <div className="flex justify-between items-center">
-               <h3 className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                 🔍 Filtros e Buscas
-               </h3>
-               <button
-                 onClick={() => setFiltrosAbertos(!filtrosAbertos)}
-                 className="text-[9px] sm:text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors uppercase"
-               >
-                 {filtrosAbertos ? 'Ocultar ⬆️' : 'Mostrar ⬇️'}
-               </button>
-             </div>
-
-             <div className={`transition-all duration-300 overflow-hidden flex flex-col gap-4 ${filtrosAbertos ? 'max-h-[1000px] opacity-100 mt-4' : 'max-h-0 opacity-0 m-0'}`}>
-                {/* Input de Busca */}
-                <input type="text" placeholder="BUSCAR SERVIDOR OU DESTINO..." className="w-full bg-slate-50 border border-slate-200 p-3 sm:p-4 rounded-xl text-xs sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 font-bold uppercase" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)} />
-
-                {/* Controles de Filtro */}
-                <div className="flex flex-col xl:flex-row gap-3">
-                   {/* Metodo e Status */}
-                   <div className="flex flex-wrap gap-2 flex-1">
-                      {/* Metodos */}
-                      <div className="flex bg-slate-50 border border-slate-200 p-1 rounded-xl">
-                        {['TODOS', 'SEI', 'CONTA SALARIO'].map(f => (
-                          <button key={f} onClick={() => setFiltroMetodo(f)} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all ${filtroMetodo === f ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>{f === 'CONTA SALARIO' ? 'SALÁRIO' : f}</button>
-                        ))}
-                      </div>
-
-                      {/* Status */}
-                      <div className="flex bg-slate-50 border border-slate-200 p-1 rounded-xl">
-                        <button onClick={() => setFiltroStatus('PENDENTE')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 ${filtroStatus === 'PENDENTE' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>⏳ PENDENTES</button>
-                        <button onClick={() => setFiltroStatus('PAGO')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 ${filtroStatus === 'PAGO' ? 'bg-green-500 text-white shadow-sm' : 'text-slate-500 hover:bg-green-50 hover:text-green-600'}`}>✅ PAGOS</button>
-                        <button onClick={() => setFiltroStatus('TODOS')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all ${filtroStatus === 'TODOS' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>VER TUDO</button>
-                      </div>
-                      
-                      {/* Order */}
-                      <button onClick={() => setOrdemData(prev => prev === 'DESC' ? 'ASC' : 'DESC')} className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-[9px] font-black transition-all text-blue-700 hover:bg-blue-100 flex items-center gap-1 uppercase">
-                        {ordemData === 'ASC' ? '⬆️ ANTIGAS' : '⬇️ RECENTES'}
-                      </button>
-                   </div>
-
-                   {/* Datas */}
-                   <div className="flex flex-col gap-2 w-full xl:w-auto">
-                      <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                         <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-transparent p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer flex-1" />
-                         <span className="text-[9px] font-black text-slate-300 uppercase">ATÉ</span>
-                         <input type="date" value={dataFimRelatorio} onChange={(e) => setDataFimRelatorio(e.target.value)} className="bg-transparent p-1.5 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer flex-1" />
-                         {(dataInicioRelatorio || dataFimRelatorio) && (
-                           <button onClick={() => { setDataInicioRelatorio(''); setDataFimRelatorio(''); mostrarToast('Filtro limpo', 'info'); }} className="text-[12px] text-red-400 hover:text-red-600 px-2" title="Limpar Período">✖</button>
-                         )}
-                      </div>
-                      <div className="flex gap-1 justify-between">
-                         <button onClick={() => aplicarFiltroRapido('HOJE')} className="flex-1 text-[8px] bg-slate-50 border border-slate-200 hover:bg-blue-100 text-slate-500 hover:text-blue-700 py-1.5 rounded-lg font-bold uppercase transition-colors">Hoje</button>
-                         <button onClick={() => aplicarFiltroRapido('7DIAS')} className="flex-1 text-[8px] bg-slate-50 border border-slate-200 hover:bg-blue-100 text-slate-500 hover:text-blue-700 py-1.5 rounded-lg font-bold uppercase transition-colors">7 Dias</button>
-                         <button onClick={() => aplicarFiltroRapido('ESTE_MES')} className="flex-1 text-[8px] bg-slate-50 border border-slate-200 hover:bg-blue-100 text-slate-500 hover:text-blue-700 py-1.5 rounded-lg font-bold uppercase transition-colors">Este Mês</button>
-                      </div>
-                   </div>
-                </div>
-             </div>
-          </div>
           
           {isAdmin && (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -1297,7 +1321,6 @@ export default function DiariasDashboard() {
                                <input type="file" className="hidden" accept=".xlsx, .xls, .pdf" disabled={uploadingTabela === tabela.key} onChange={(e) => handleUploadComprovante(e, tabela.ids, tabela.key)} />
                              </label>
                           )}
-                          {/* BOTÃO ALTERADO PARA ABRIR O MODAL DE DATA */}
                           <button onClick={() => abrirModalBaixa(tabela.ids)} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 sm:py-3.5 px-2 rounded-xl uppercase text-[10px] tracking-widest shadow-sm transition-all active:scale-95 mt-1">
                             ✓ Marcar Tabela Paga
                           </button>
@@ -1364,8 +1387,11 @@ export default function DiariasDashboard() {
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.nome || ""} onChange={e => setDadosEditados({...dadosEditados, nome: e.target.value.toUpperCase()})} placeholder="Nome do Servidor" />
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.adolescente_nome || ""} onChange={e => setDadosEditados({...dadosEditados, adolescente_nome: e.target.value.toUpperCase()})} placeholder="Adolescente / Motivo" />
                          
-                         <input type="date" className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.data_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, data_viagem: e.target.value})} />
+                         {/* --- CAMPO OBJETIVO NO MODO DE EDIÇÃO --- */}
+                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.objetivo || ""} onChange={e => setDadosEditados({...dadosEditados, objetivo: e.target.value.toUpperCase()})} placeholder="Objetivo (Ex: Transferência)" />
+                         
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.local_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, local_viagem: e.target.value.toUpperCase()})} placeholder="Destino / Cidade" />
+                         <input type="date" className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.data_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, data_viagem: e.target.value})} />
                          
                          <select className="border p-2.5 sm:p-3 rounded-lg text-sm w-full font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.metodo_pagamento || "SEI"} onChange={e => setDadosEditados({...dadosEditados, metodo_pagamento: e.target.value})}>
                            <option value="SEI">SISTEMA SEI</option>
@@ -1402,6 +1428,10 @@ export default function DiariasDashboard() {
                         <p className="text-xs font-bold text-blue-600 uppercase mt-1 break-words">👦 {item.adolescente_nome}</p>
                         
                         <div className="mt-3 bg-slate-50 sm:bg-white border border-slate-100 p-3 rounded-xl text-[11px] sm:text-xs space-y-1.5 text-slate-600">
+                          {/* --- MOSTRANDO OBJETIVO NO CARD --- */}
+                          {item.objetivo && (
+                            <p className="uppercase flex items-start gap-2">🎯 <span className="font-bold text-slate-800 break-words">{item.objetivo}</span></p>
+                          )}
                           <p className="flex items-start gap-2">📍 <span className="font-bold text-slate-800 uppercase flex-1 break-words">{item.local_viagem}</span></p>
                           <p className="uppercase flex items-start gap-2">📄 <span className="break-words">{item.metodo_pagamento} {item.numero_processo ? `| SEI: ${item.numero_processo}` : ''}</span></p>
                           {item.observacoes && <p className="italic text-slate-400 mt-2 border-t pt-2 border-slate-200 sm:border-slate-100 break-words">Obs: "{item.observacoes}"</p>}
