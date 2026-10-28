@@ -53,11 +53,9 @@ export default function DiariasDashboard() {
   const [servidores, setServidores] = useState<any[]>([]) 
   const [loading, setLoading] = useState(true)
   
-  // --- FEEDBACK VISUAL GLOBAL (TELA DE CARREGAMENTO) ---
   const [isProcessing, setIsProcessing] = useState(false);
   const [processMsg, setProcessMsg] = useState('Processando...');
 
-  // --- SISTEMA DE NOTIFICAÇÕES (TOASTS) ---
   const [toast, setToast] = useState<{ msg: string, tipo: 'sucesso' | 'erro' | 'info', id: number } | null>(null);
 
   const mostrarToast = useCallback((msg: string, tipo: 'sucesso' | 'erro' | 'info' = 'info') => {
@@ -68,12 +66,10 @@ export default function DiariasDashboard() {
     }, 3500);
   }, []);
 
-  // --- AUTENTICAÇÃO SEGURA ---
   const [estaAutenticado, setEstaAutenticado] = useState(false)
   const [usuarioLogado, setUsuarioLogado] = useState('') 
   const [usuarioEmail, setUsuarioEmail] = useState('') 
   
-  // --- NÍVEL DE ACESSO E LOGS ---
   const emailsAdmin = ['santos.junior12@hotmail.com', 'ederson@live.com']
   const isAdmin = emailsAdmin.includes(usuarioEmail)
 
@@ -101,6 +97,9 @@ export default function DiariasDashboard() {
   const [emailInput, setEmailInput] = useState('')
   const [senhaInput, setSenhaInput] = useState('')
   const [msgAuth, setMsgAuth] = useState({ texto: '', tipo: '' })
+  
+  const [lembrarDados, setLembrarDados] = useState(false)
+  const [temCredencialSalva, setTemCredencialSalva] = useState(false)
 
   const [pesquisa, setPesquisa] = useState('')
   const [filtroMetodo, setFiltroMetodo] = useState('TODOS')
@@ -117,42 +116,34 @@ export default function DiariasDashboard() {
   const [ordemData, setOrdemData] = useState<'DESC' | 'ASC'>('ASC')
   const [manterDados, setManterDados] = useState(false)
   
-  // --- ESTADO PARA OCULTAR/MOSTRAR OS FILTROS ---
   const [filtrosAbertos, setFiltrosAbertos] = useState(true)
   const [isScrolled, setIsScrolled] = useState(false)
 
-  // --- EFEITO DE ROLAGEM DO MENU ---
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 40) {
-        setIsScrolled(true);
-        setFiltrosAbertos(false);
+        setIsScrolled(true); setFiltrosAbertos(false);
       } else {
-        setIsScrolled(false);
-        setFiltrosAbertos(true);
+        setIsScrolled(false); setFiltrosAbertos(true);
       }
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // --- ESTADO DA PAGINAÇÃO E TABELAS PAGAS ---
   const [limiteVisivel, setLimiteVisivel] = useState(50)
   const [mostrarTabelasPagas, setMostrarTabelasPagas] = useState(false)
 
-  // --- NOVOS ESTADOS PARA A BAIXA COM DATA ---
   const [modalBaixaAberto, setModalBaixaAberto] = useState(false)
   const [idsParaBaixa, setIdsParaBaixa] = useState<string[]>([])
   const [dataBaixa, setDataBaixa] = useState(new Date().toISOString().split('T')[0])
 
-  useEffect(() => {
-    setLimiteVisivel(50);
-  }, [pesquisa, filtroMetodo, filtroStatus, dataInicioRelatorio, dataFimRelatorio, ordemData]);
+  useEffect(() => { setLimiteVisivel(50); }, [pesquisa, filtroMetodo, filtroStatus, dataInicioRelatorio, dataFimRelatorio, ordemData]);
 
   const [formNome, setFormNome] = useState('')
   const [formCargo, setFormCargo] = useState('')
   const [formLocal, setFormLocal] = useState('')
-  const [formObjetivo, setFormObjetivo] = useState('')
+  const [formObjetivo, setFormObjetivo] = useState('') 
 
   const [idEditando, setIdEditando] = useState<string | null>(null)
   const [dadosEditados, setDadosEditados] = useState<any>({})
@@ -182,7 +173,6 @@ export default function DiariasDashboard() {
     const dataViagem = formatarDataBR(diaria.data_viagem);
     const dataEmissao = new Date().toLocaleDateString('pt-BR');
     
-    // Substitui quebras de linha para mostrar bonitinho no HTML
     const adolescenteFormatado = (diaria.adolescente_nome || '').replace(/\n/g, '<br>');
 
     const htmlRecibo = `
@@ -300,9 +290,18 @@ export default function DiariasDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setEstaAutenticado(true); setUsuarioLogado(session.user.user_metadata?.nome || session.user.email); setUsuarioEmail(session.user.email || '');
+      } else {
+        const credsSalvas = localStorage.getItem('csiprc_creds');
+        if (credsSalvas) {
+          try {
+            const { e, s } = JSON.parse(credsSalvas);
+            setEmailInput(e); setSenhaInput(s); setTemCredencialSalva(true); setLembrarDados(true);
+          } catch(err) {}
+        }
       }
     };
     verificarSessao();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) { setEstaAutenticado(true); setUsuarioLogado(session.user.user_metadata?.nome || session.user.email); setUsuarioEmail(session.user.email || ''); } 
       else { setEstaAutenticado(false); setUsuarioLogado(''); setUsuarioEmail(''); }
@@ -344,13 +343,30 @@ export default function DiariasDashboard() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: emailInput, password: senhaInput });
       if (error) throw error;
+      
+      if (lembrarDados) { localStorage.setItem('csiprc_creds', JSON.stringify({ e: emailInput, s: senhaInput })); } 
+      else { localStorage.removeItem('csiprc_creds'); }
+
       setMsgAuth({ texto: '', tipo: '' }); mostrarToast("Login efetuado com sucesso!", "sucesso");
-    } catch (err: any) { setMsgAuth({ texto: 'E-mail ou senha incorretos.', tipo: 'erro' }); } finally { setIsProcessing(false); }
+    } catch (err: any) { 
+      setMsgAuth({ texto: 'E-mail ou senha incorretos.', tipo: 'erro' }); 
+      setTemCredencialSalva(false);
+    } finally { setIsProcessing(false); }
+  }
+
+  const limparCredenciais = () => {
+    setTemCredencialSalva(false); setEmailInput(''); setSenhaInput(''); setLembrarDados(false); localStorage.removeItem('csiprc_creds');
   }
 
   const fazerLogout = async () => {
     await supabase.auth.signOut();
-    setEstaAutenticado(false); setUsuarioLogado(''); setUsuarioEmail(''); setEmailInput(''); setSenhaInput(''); 
+    setEstaAutenticado(false); setUsuarioLogado(''); setUsuarioEmail(''); 
+    
+    const credsSalvas = localStorage.getItem('csiprc_creds');
+    if(credsSalvas) {
+      try { const { e, s } = JSON.parse(credsSalvas); setEmailInput(e); setSenhaInput(s); setTemCredencialSalva(true); setLembrarDados(true); } catch(e) {}
+    } else { setEmailInput(''); setSenhaInput(''); }
+
     if (timerAviso.current) clearTimeout(timerAviso.current);
     if (timerLogout.current) clearTimeout(timerLogout.current);
   }
@@ -706,33 +722,112 @@ export default function DiariasDashboard() {
   const sugestoesCargos = [...new Set(servidores.map(s => s.cargo).filter(Boolean).map(c => c.toUpperCase()))] 
   const sugestoesLocais = [...new Set(diarias.map(d => d.local_viagem).filter(Boolean).map(l => l.toUpperCase()))]
 
+  // =========================================================================
+  // TELA DE LOGIN (NOVO DESIGN GLASSMORPHISM + CRÉDITOS EM DESTAQUE)
+  // =========================================================================
   if (!estaAutenticado) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 to-slate-900 p-4 relative overflow-hidden">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0B1120] p-4 relative overflow-hidden">
+        
+        {/* BACKGROUND EFFECTS */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600 rounded-full blur-[120px] opacity-20 pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-400 rounded-full blur-[120px] opacity-10 pointer-events-none"></div>
+
         {isProcessing && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-pulse">
-              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-              <p className="font-black text-slate-800 uppercase tracking-widest text-xs">{processMsg}</p>
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#0B1120]/80 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white/10 p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-pulse border border-white/20">
+              <div className="w-10 h-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              <p className="font-black text-white uppercase tracking-widest text-xs">{processMsg}</p>
             </div>
           </div>
         )}
+
         {toast && (
-          <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm text-white flex items-center gap-3 animate-slideDown ${toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'}`}>
+          <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm text-white flex items-center gap-3 animate-slideDown border border-white/20 backdrop-blur-md ${toast.tipo === 'sucesso' ? 'bg-green-600/90' : toast.tipo === 'erro' ? 'bg-red-600/90' : 'bg-blue-600/90'}`}>
             <span className="text-xl">{toast.tipo === 'sucesso' ? '✅' : toast.tipo === 'erro' ? '⚠️' : 'ℹ️'}</span>{toast.msg}
           </div>
         )}
-        <div className="absolute bottom-4 text-slate-600 text-[10px] uppercase font-bold tracking-widest opacity-50">Versão Seguro/LGPD • Dev: Educador Social Junior</div>
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm flex flex-col items-center border-t-8 border-blue-600 relative z-10 transition-all">
-          <div className="mb-6 text-center"><h1 className="text-4xl font-black text-slate-900 italic tracking-tighter mb-1">CSIPRC</h1><p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">Acesso Restrito</p></div>
-          <form onSubmit={lidarComLogin} className="w-full flex flex-col gap-3">
-            <input type="email" placeholder="E-MAIL" className="input-login" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} required />
-            <input type="password" placeholder="SENHA" className="input-login" value={senhaInput} onChange={(e) => setSenhaInput(e.target.value)} required />
-            {msgAuth.texto && <p className={`text-xs font-bold text-center mt-1 animate-pulse ${msgAuth.tipo === 'erro' ? 'text-red-500' : 'text-green-600'}`}>{msgAuth.texto}</p>}
-            <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-xl uppercase text-xs tracking-widest mt-2" disabled={isProcessing}>ENTRAR</button>
+        
+        {/* CABEÇALHO INSTITUCIONAL */}
+        <div className="text-center mb-8 z-10 animate-fadeIn" style={{ animationDelay: '0.1s' }}>
+           <h2 className="text-blue-400 font-black text-sm sm:text-base uppercase tracking-[0.2em] mb-1">FASE / MA</h2>
+           <h3 className="text-slate-300 font-bold text-xs sm:text-sm uppercase tracking-widest max-w-md mx-auto leading-relaxed">Centro Socioeducativo de Internação Provisória da Região dos Cocais</h3>
+           <div className="mt-4 flex items-center justify-center gap-4 text-[10px] sm:text-xs text-slate-500 uppercase tracking-widest font-bold">
+              <span className="bg-white/5 px-3 py-1 rounded-full border border-white/10">DIRETORA KELMA FABIANA</span>
+              <span className="bg-white/5 px-3 py-1 rounded-full border border-white/10">ADM EDERSON</span>
+           </div>
+        </div>
+
+        {/* CAIXA DE LOGIN (GLASSMORPHISM) */}
+        <div className="bg-white/10 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm flex flex-col items-center border border-white/20 relative z-10 transition-all animate-fadeIn" style={{ animationDelay: '0.2s' }}>
+          
+          <div className="mb-8 text-center">
+            <h1 className="text-4xl font-black text-white italic tracking-tighter mb-1 drop-shadow-lg">CSIPRC</h1>
+            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-[0.3em]">Acesso Restrito</p>
+          </div>
+          
+          <form onSubmit={lidarComLogin} className="w-full flex flex-col gap-4">
+            
+            {temCredencialSalva ? (
+              <div className="flex flex-col gap-2 mb-2 animate-fadeIn text-center p-6 bg-blue-900/30 border border-blue-500/30 rounded-2xl shadow-inner backdrop-blur-sm">
+                 <span className="text-4xl mb-2 drop-shadow-lg">🔐</span>
+                 <p className="text-xs font-black text-blue-300 uppercase tracking-widest">Credenciais Protegidas</p>
+                 <p className="text-[10px] font-medium text-slate-300 mb-2">Seus dados estão salvos e ocultos.</p>
+                 <button type="button" onClick={limparCredenciais} className="text-[9px] font-black text-red-400 hover:text-red-300 hover:underline transition-all py-1 mt-2">ENTRAR COM OUTRA CONTA</button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 animate-fadeIn">
+                <input type="email" placeholder="E-MAIL" className="input-login glass-input" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} required autoFocus />
+                <input type="password" placeholder="SENHA" className="input-login glass-input" value={senhaInput} onChange={(e) => setSenhaInput(e.target.value)} required />
+                
+                <label className="flex items-center justify-center gap-2 cursor-pointer mt-2 mb-1 group w-fit mx-auto">
+                  <input type="checkbox" checked={lembrarDados} onChange={(e) => setLembrarDados(e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-white/10 accent-blue-500 cursor-pointer" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-white transition-colors select-none">Lembrar meus dados</span>
+                </label>
+              </div>
+            )}
+
+            {msgAuth.texto && <p className={`text-xs font-bold text-center mt-1 animate-pulse ${msgAuth.tipo === 'erro' ? 'text-red-400' : 'text-green-400'}`}>{msgAuth.texto}</p>}
+            
+            <button type="submit" className="w-full bg-blue-600 text-white font-black py-4 rounded-xl hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 transition-all uppercase text-xs tracking-widest mt-2 border border-blue-500" disabled={isProcessing}>
+              ENTRAR NO SISTEMA
+            </button>
           </form>
         </div>
-        <style jsx>{`.input-login { width: 100%; background-color: #f1f5f9; border: 2px solid #94a3b8; padding: 1rem; border-radius: 0.75rem; text-align: center; font-weight: 800; outline: none; color: #000000; transition: all 0.2s; } .input-login::placeholder { color: #334155; opacity: 1; } .input-login:focus { border-color: #2563eb; background-color: #ffffff; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); } @keyframes slideDown { 0% { transform: translate(-50%, -150%); opacity: 0; } 100% { transform: translate(-50%, 0); opacity: 1; } } .animate-slideDown { animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; } @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } } .animate-fadeIn { animation: fadeIn 0.3s ease forwards; }`}</style>
+
+        {/* CRÉDITOS DO DESENVOLVEDOR (EM DESTAQUE) */}
+        <div className="absolute bottom-6 z-10 flex flex-col items-center animate-fadeIn" style={{ animationDelay: '0.4s' }}>
+           <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-2">Desenvolvido por</p>
+           <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700 px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-2 hover:bg-slate-800 transition-colors">
+              <span className="text-blue-400 text-sm">👨‍💻</span>
+              <span className="text-[10px] font-black text-slate-200 uppercase tracking-[0.15em]">Junior Santos <span className="text-slate-500 mx-1">•</span> Programador Asplan Fase/MA</span>
+           </div>
+        </div>
+
+        <style jsx>{`
+          .glass-input { 
+             width: 100%; 
+             background-color: rgba(255, 255, 255, 0.05); 
+             border: 1px solid rgba(255, 255, 255, 0.1); 
+             padding: 1rem; 
+             border-radius: 0.75rem; 
+             text-align: center; 
+             font-weight: 800; 
+             outline: none; 
+             color: #ffffff; 
+             transition: all 0.3s ease; 
+          }
+          .glass-input::placeholder { color: rgba(255, 255, 255, 0.3); }
+          .glass-input:focus { 
+             border-color: rgba(59, 130, 246, 0.5); 
+             background-color: rgba(255, 255, 255, 0.1); 
+             box-shadow: 0 0 15px rgba(59, 130, 246, 0.2); 
+          }
+          @keyframes slideDown { 0% { transform: translate(-50%, -150%); opacity: 0; } 100% { transform: translate(-50%, 0); opacity: 1; } }
+          .animate-slideDown { animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+          @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+          .animate-fadeIn { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+        `}</style>
       </div>
     )
   }
@@ -902,10 +997,8 @@ export default function DiariasDashboard() {
                 <AutocompleteInput name="nome" placeholder="Nome do Servidor" value={formNome} onChange={(e: any) => { setFormNome(e.target.value); const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase()); if(serv && serv.cargo) setFormCargo(serv.cargo); }} sugestoes={sugestoesNomes} required />
                 {metodoSelecionado === 'CONTA SALARIO' && <AutocompleteInput name="cargo" placeholder="Cargo" value={formCargo} onChange={(e: any) => setFormCargo(e.target.value)} sugestoes={sugestoesCargos} />}
                 
-                {/* --- CAMPO ADOLESCENTE AGORA É TEXTAREA PARA PULAR LINHA (MULTILINE) --- */}
                 <textarea name="adolescente_nome" placeholder="Adolescente(s) / Motivo (Pode pular linha p/ vários)" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full resize-y" rows={2} onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
                 
-                {/* --- CAMPO OBJETIVO CONDICIONAL: SÓ APARECE SE FOR CONTA SALÁRIO --- */}
                 {metodoSelecionado === 'CONTA SALARIO' && (
                   <input name="objetivo" placeholder="Objetivo (Ex: Transferência)" value={formObjetivo} onChange={(e) => setFormObjetivo(e.target.value.toUpperCase())} className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
                 )}
@@ -1119,10 +1212,8 @@ export default function DiariasDashboard() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.nome || ""} onChange={e => setDadosEditados({...dadosEditados, nome: e.target.value.toUpperCase()})} placeholder="Nome do Servidor" />
                          
-                         {/* --- CAMPO ADOLESCENTE NO MODO DE EDIÇÃO --- */}
                          <textarea className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500 resize-y" value={dadosEditados.adolescente_nome || ""} onChange={e => setDadosEditados({...dadosEditados, adolescente_nome: e.target.value.toUpperCase()})} placeholder="Adolescente(s) / Motivo" rows={2} />
                          
-                         {/* --- CAMPO OBJETIVO CONDICIONAL NO MODO DE EDIÇÃO --- */}
                          {dadosEditados.metodo_pagamento === 'CONTA SALARIO' && (
                            <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.objetivo || ""} onChange={e => setDadosEditados({...dadosEditados, objetivo: e.target.value.toUpperCase()})} placeholder="Objetivo (Ex: Transferência)" />
                          )}
@@ -1156,12 +1247,9 @@ export default function DiariasDashboard() {
                         </div>
                         
                         <h3 className="font-black text-slate-800 uppercase text-base sm:text-lg leading-tight break-words">{item.nome}</h3>
-                        
-                        {/* --- PERMITINDO QUEBRA DE LINHA AQUI --- */}
                         <p className="text-xs font-bold text-blue-600 uppercase mt-1 break-words whitespace-pre-wrap">👦 {item.adolescente_nome}</p>
                         
                         <div className="mt-3 bg-slate-50 sm:bg-white border border-slate-100 p-3 rounded-xl text-[11px] sm:text-xs space-y-1.5 text-slate-600">
-                          {/* --- MOSTRANDO OBJETIVO NO CARD --- */}
                           {item.objetivo && item.metodo_pagamento === 'CONTA SALARIO' && (
                             <p className="uppercase flex items-start gap-2">🎯 <span className="font-bold text-slate-800 break-words">{item.objetivo}</span></p>
                           )}
@@ -1232,8 +1320,13 @@ export default function DiariasDashboard() {
         </div>
       )}
 
+      {/* --- CRÉDITOS RODAPÉ SISTEMA --- */}
       <div className="fixed bottom-2 right-0 left-0 text-center pointer-events-none z-40">
-        <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 opacity-50 uppercase tracking-widest px-4">Sistema Seguro/LGPD • Dev: Educador Social Junior</p>
+        <div className="inline-block bg-white/80 backdrop-blur-sm border border-slate-200 px-4 py-1.5 rounded-t-lg shadow-sm">
+           <p className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest">
+             👨‍💻 <span className="text-blue-600">JUNIOR SANTOS</span> PROGRAMADOR ASPLAN FASE/MA
+           </p>
+        </div>
       </div>
 
       {isAdmin && (
