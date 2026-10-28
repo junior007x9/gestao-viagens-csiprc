@@ -121,7 +121,7 @@ export default function DiariasDashboard() {
   const [filtrosAbertos, setFiltrosAbertos] = useState(true)
   const [isScrolled, setIsScrolled] = useState(false)
 
-  // --- EFEITO DE SCROLL ---
+  // --- EFEITO DE ROLAGEM DO MENU ---
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 40) {
@@ -152,7 +152,7 @@ export default function DiariasDashboard() {
   const [formNome, setFormNome] = useState('')
   const [formCargo, setFormCargo] = useState('')
   const [formLocal, setFormLocal] = useState('')
-  const [formObjetivo, setFormObjetivo] = useState('') // <-- NOVO ESTADO OBJETIVO
+  const [formObjetivo, setFormObjetivo] = useState('')
 
   const [idEditando, setIdEditando] = useState<string | null>(null)
   const [dadosEditados, setDadosEditados] = useState<any>({})
@@ -181,6 +181,9 @@ export default function DiariasDashboard() {
     const valorFormatado = Number(diaria.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const dataViagem = formatarDataBR(diaria.data_viagem);
     const dataEmissao = new Date().toLocaleDateString('pt-BR');
+    
+    // Substitui quebras de linha para mostrar bonitinho no HTML
+    const adolescenteFormatado = (diaria.adolescente_nome || '').replace(/\n/g, '<br>');
 
     const htmlRecibo = `
       <!DOCTYPE html>
@@ -200,10 +203,7 @@ export default function DiariasDashboard() {
             .assinatura { margin-top: 80px; text-align: center; }
             .linha { border-top: 1px solid #333; width: 350px; margin: 0 auto 10px; }
             .rodape { margin-top: 50px; text-align: center; font-size: 10px; color: #94a3b8; }
-            @media print {
-              body { padding: 0; }
-              .box-valor { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
-            }
+            @media print { body { padding: 0; } .box-valor { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; } }
           </style>
         </head>
         <body>
@@ -211,41 +211,23 @@ export default function DiariasDashboard() {
             <h1>Recibo de Diária / Viagem</h1>
             <h2>Centro Socioeducativo de Internação Provisória da Região dos Cocais (CSIPRC)</h2>
           </div>
-          
           <div class="conteudo">
             <p>Recebi(emos) do <strong>Governo do Estado do Maranhão / CSIPRC</strong>, a importância de <span class="destaque">${valorFormatado}</span> referente ao pagamento de despesas e diárias detalhadas abaixo:</p>
-            
             <ul>
               <li><strong>Servidor(a):</strong> <span class="destaque">${diaria.nome}</span></li>
-              <li><strong>Cargo:</strong> ${diaria.cargo || 'Não informado'}</li>
-              <li><strong>Objetivo:</strong> ${diaria.objetivo || 'Não informado'}</li>
+              ${diaria.metodo_pagamento === 'CONTA SALARIO' ? `<li><strong>Cargo:</strong> ${diaria.cargo || 'Não informado'}</li><li><strong>Objetivo:</strong> ${diaria.objetivo || 'Não informado'}</li>` : ''}
               <li><strong>Destino:</strong> ${diaria.local_viagem}</li>
-              <li><strong>Motivo / Adolescente:</strong> ${diaria.adolescente_nome}</li>
+              <li><strong>Motivo / Adolescente(s):</strong><br> ${adolescenteFormatado}</li>
               <li><strong>Data da Viagem:</strong> ${dataViagem}</li>
-              <li><strong>Processo SEI:</strong> ${diaria.numero_processo || 'Sem processo'}</li>
+              ${diaria.numero_processo ? `<li><strong>Processo SEI:</strong> ${diaria.numero_processo}</li>` : ''}
               <li><strong>Método Pagamento:</strong> ${diaria.metodo_pagamento}</li>
             </ul>
-
             <div class="box-valor">VALOR TOTAL: ${valorFormatado}</div>
-
             <p style="text-align: justify;">Para maior clareza e fins de comprovação, firmo o presente recibo dando plena e geral quitação.</p>
           </div>
-
-          <div class="assinatura">
-            <div class="linha"></div>
-            <p class="destaque">${diaria.nome}</p>
-            <p>Timon - MA, ${dataEmissao}</p>
-          </div>
-
-          <div class="rodape">
-            Documento gerado eletronicamente pelo Sistema de Gestão CSIPRC
-          </div>
-
-          <script>
-            window.onload = function() { 
-              setTimeout(function() { window.print(); }, 500);
-            }
-          </script>
+          <div class="assinatura"><div class="linha"></div><p class="destaque">${diaria.nome}</p><p>Timon - MA, ${dataEmissao}</p></div>
+          <div class="rodape">Documento gerado eletronicamente pelo Sistema de Gestão CSIPRC</div>
+          <script>window.onload = function() { setTimeout(function() { window.print(); }, 500); }</script>
         </body>
       </html>
     `;
@@ -261,34 +243,15 @@ export default function DiariasDashboard() {
   }
 
   const aplicarFiltroRapido = (tipo: 'HOJE' | '7DIAS' | 'ESTE_MES' | 'MES_PASSADO') => {
-    const hoje = new Date();
-    let inicio = new Date();
-    let fim = new Date();
-
-    if (tipo === 'HOJE') {
-    } else if (tipo === '7DIAS') {
-      inicio.setDate(hoje.getDate() - 7);
-    } else if (tipo === 'ESTE_MES') {
-      inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-      fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0); 
-    } else if (tipo === 'MES_PASSADO') {
-      inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-      fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0); 
-    }
-
-    const formatarLocalYMD = (d: Date) => {
-      const ano = d.getFullYear();
-      const mes = String(d.getMonth() + 1).padStart(2, '0');
-      const dia = String(d.getDate()).padStart(2, '0');
-      return `${ano}-${mes}-${dia}`;
-    }
-
-    setDataInicioRelatorio(formatarLocalYMD(inicio));
-    setDataFimRelatorio(formatarLocalYMD(fim));
+    const hoje = new Date(); let inicio = new Date(); let fim = new Date();
+    if (tipo === '7DIAS') { inicio.setDate(hoje.getDate() - 7); } 
+    else if (tipo === 'ESTE_MES') { inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1); fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0); } 
+    else if (tipo === 'MES_PASSADO') { inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1); fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0); }
+    const formatarLocalYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setDataInicioRelatorio(formatarLocalYMD(inicio)); setDataFimRelatorio(formatarLocalYMD(fim));
     mostrarToast("Filtro de data aplicado!", "info");
   }
 
-  // --- CÁLCULOS: A GERAR (NOVAS) ---
   const diariasNaoGeradasNoPeriodo = diarias.filter(d => {
     let valido = !d.pago && !d.data_ultima_exportacao;
     if (dataInicioRelatorio) valido = valido && d.data_viagem >= dataInicioRelatorio;
@@ -305,24 +268,16 @@ export default function DiariasDashboard() {
 
     const pendentes = diarias.filter(d => !d.pago && !d.data_ultima_exportacao && d.metodo_pagamento === metodo);
     const ids = pendentes.map(d => d.id);
-    
     if (ids.length === 0) return mostrarToast("Não há diárias para gerar.", "info");
 
     setIsProcessing(true); setProcessMsg(`A gerar tabela de ${metodo}...`);
     try {
       const agora = new Date().toISOString();
-      await Promise.all(ids.map(id => 
-        supabase.from('diarias').update({ 
-          data_ultima_exportacao: agora, updated_at: agora, usuario_alteracao: usuarioLogado 
-        }).eq('id', id)
-      ));
-
+      await Promise.all(ids.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
       setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, data_ultima_exportacao: agora, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
       await registrarLog('TABELA GERADA', `Gerou tabela de ${metodo} (${ids.length} viagens) e enviou para pendências.`);
       mostrarToast(`Tabela gerada e enviada para as Pendências!`, "sucesso");
-    } finally {
-      setIsProcessing(false);
-    }
+    } finally { setIsProcessing(false); }
   }
 
   const agruparTabelas = (lista: any[]) => {
@@ -330,60 +285,38 @@ export default function DiariasDashboard() {
        const dataStr = d.data_ultima_exportacao.split('T')[0];
        const key = `${d.metodo_pagamento}_${dataStr}`;
        if (!acc[key]) { acc[key] = { key, metodo: d.metodo_pagamento, data: d.data_ultima_exportacao, valorTotal: 0, ids: [], comprovante_url: d.comprovante_url || null }; }
-       acc[key].valorTotal += Number(d.valor) || 0;
-       acc[key].ids.push(d.id);
+       acc[key].valorTotal += Number(d.valor) || 0; acc[key].ids.push(d.id);
        if (d.comprovante_url && !acc[key].comprovante_url) acc[key].comprovante_url = d.comprovante_url;
        return acc;
     }, {} as Record<string, any>);
     return Object.values(agrupado);
   }
 
-  const tabelasPendentesArray = agruparTabelas(diarias.filter(d => d.data_ultima_exportacao && !d.pago))
-    .sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
-
-  const tabelasPagasArray = agruparTabelas(diarias.filter(d => d.data_ultima_exportacao && d.pago))
-    .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  const tabelasPendentesArray = agruparTabelas(diarias.filter(d => d.data_ultima_exportacao && !d.pago)).sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
+  const tabelasPagasArray = agruparTabelas(diarias.filter(d => d.data_ultima_exportacao && d.pago)).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
   useEffect(() => {
     const verificarSessao = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        setEstaAutenticado(true);
-        setUsuarioLogado(session.user.user_metadata?.nome || session.user.email);
-        setUsuarioEmail(session.user.email || '');
+        setEstaAutenticado(true); setUsuarioLogado(session.user.user_metadata?.nome || session.user.email); setUsuarioEmail(session.user.email || '');
       }
     };
     verificarSessao();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setEstaAutenticado(true);
-        setUsuarioLogado(session.user.user_metadata?.nome || session.user.email);
-        setUsuarioEmail(session.user.email || '');
-      } else {
-        setEstaAutenticado(false);
-        setUsuarioLogado('');
-        setUsuarioEmail('');
-      }
+      if (session) { setEstaAutenticado(true); setUsuarioLogado(session.user.user_metadata?.nome || session.user.email); setUsuarioEmail(session.user.email || ''); } 
+      else { setEstaAutenticado(false); setUsuarioLogado(''); setUsuarioEmail(''); }
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  const executarLogoutAutomatico = useCallback(() => {
-    setAvisoInativo(false); fazerLogout(); 
-    mostrarToast("Sessão encerrada por inatividade (2 horas).", "erro");
-  }, [mostrarToast]);
+  const executarLogoutAutomatico = useCallback(() => { setAvisoInativo(false); fazerLogout(); mostrarToast("Sessão encerrada por inatividade (2 horas).", "erro"); }, [mostrarToast]);
 
   const resetarTimer = useCallback(() => {
     if (timerAviso.current) clearTimeout(timerAviso.current);
     if (timerLogout.current) clearTimeout(timerLogout.current);
     setAvisoInativo(false); setSegundosRestantes(60);
-    if (estaAutenticado) {
-      timerAviso.current = setTimeout(() => {
-        setAvisoInativo(true); timerLogout.current = setTimeout(executarLogoutAutomatico, TEMPO_DO_AVISO_ATE_LOGOUT);
-      }, TEMPO_ATE_AVISO);
-    }
+    if (estaAutenticado) { timerAviso.current = setTimeout(() => { setAvisoInativo(true); timerLogout.current = setTimeout(executarLogoutAutomatico, TEMPO_DO_AVISO_ATE_LOGOUT); }, TEMPO_ATE_AVISO); }
   }, [estaAutenticado, executarLogoutAutomatico]);
 
   useEffect(() => {
@@ -406,27 +339,18 @@ export default function DiariasDashboard() {
     }
   }, [estaAutenticado, resetarTimer]);
 
-
   const lidarComLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsProcessing(true); setProcessMsg('A autenticar...');
-    setMsgAuth({ texto: 'A autenticar...', tipo: 'info' });
+    e.preventDefault(); setIsProcessing(true); setProcessMsg('A autenticar...'); setMsgAuth({ texto: 'A autenticar...', tipo: 'info' });
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: emailInput, password: senhaInput });
+      const { error } = await supabase.auth.signInWithPassword({ email: emailInput, password: senhaInput });
       if (error) throw error;
-      setMsgAuth({ texto: '', tipo: '' });
-      mostrarToast("Login efetuado com sucesso!", "sucesso");
-    } catch (err: any) {
-      setMsgAuth({ texto: 'E-mail ou senha incorretos.', tipo: 'erro' });
-    } finally {
-      setIsProcessing(false);
-    }
+      setMsgAuth({ texto: '', tipo: '' }); mostrarToast("Login efetuado com sucesso!", "sucesso");
+    } catch (err: any) { setMsgAuth({ texto: 'E-mail ou senha incorretos.', tipo: 'erro' }); } finally { setIsProcessing(false); }
   }
 
   const fazerLogout = async () => {
     await supabase.auth.signOut();
-    setEstaAutenticado(false); setUsuarioLogado(''); setUsuarioEmail('');
-    setEmailInput(''); setSenhaInput(''); 
+    setEstaAutenticado(false); setUsuarioLogado(''); setUsuarioEmail(''); setEmailInput(''); setSenhaInput(''); 
     if (timerAviso.current) clearTimeout(timerAviso.current);
     if (timerLogout.current) clearTimeout(timerLogout.current);
   }
@@ -435,10 +359,7 @@ export default function DiariasDashboard() {
     let listaPendentes = diarias.filter(d => !d.pago && d.metodo_pagamento === metodo && !d.data_ultima_exportacao);
     if (dataInicioRelatorio) listaPendentes = listaPendentes.filter(d => d.data_viagem >= dataInicioRelatorio);
     if (dataFimRelatorio) listaPendentes = listaPendentes.filter(d => d.data_viagem <= dataFimRelatorio);
-    if (listaPendentes.length === 0) { 
-      mostrarToast(`Não há novas diárias para gerar relatório de ${metodo} no período selecionado!`, "info"); 
-      return; 
-    }
+    if (listaPendentes.length === 0) { mostrarToast(`Não há novas diárias para gerar relatório de ${metodo} no período selecionado!`, "info"); return; }
 
     setIsProcessing(true); setProcessMsg('A gerar a Tabela no Excel...');
     listaPendentes.sort((a, b) => new Date(a.data_viagem).getTime() - new Date(b.data_viagem).getTime());
@@ -461,18 +382,11 @@ export default function DiariasDashboard() {
            await Promise.all(idsAExportar.map(id => supabase.from('diarias').update({ data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
            setDiarias(prev => prev.map(d => idsAExportar.includes(d.id) ? { ...d, data_ultima_exportacao: agora, usuario_alteracao: usuarioLogado } : d));
            mostrarToast("Relatório gerado! Diárias enviadas para pendências.", "sucesso");
-           
            await registrarLog('GERAÇÃO DE RELATÓRIO', `Gerou nova tabela Excel para diárias via ${metodo}.`);
            fetchDiarias();
         }
-      } else { 
-        mostrarToast("Erro na API ao gerar Excel: " + data.error, "erro"); 
-      }
-    } catch (err) { 
-      mostrarToast("Erro de ligação ao gerar Excel.", "erro"); 
-    } finally {
-      setIsProcessing(false);
-    }
+      } else { mostrarToast("Erro na API ao gerar Excel: " + data.error, "erro"); }
+    } catch (err) { mostrarToast("Erro de ligação ao gerar Excel.", "erro"); } finally { setIsProcessing(false); }
   }
 
   const baixarRelatorioAntigo = async (metodo: string, ids: string[], dataExportacao: string) => {
@@ -495,14 +409,8 @@ export default function DiariasDashboard() {
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
         await registrarLog('DOWNLOAD DE RELATÓRIO', `Transferiu novamente a tabela antiga de ${metodo}.`);
         mostrarToast("Transferência refeita com sucesso!", "sucesso");
-      } else { 
-        mostrarToast("Erro API: " + data.error, "erro"); 
-      }
-    } catch (err) { 
-      mostrarToast("Erro ao processar Excel antigo.", "erro"); 
-    } finally {
-      setIsProcessing(false);
-    }
+      } else { mostrarToast("Erro API: " + data.error, "erro"); }
+    } catch (err) { mostrarToast("Erro ao processar Excel antigo.", "erro"); } finally { setIsProcessing(false); }
   }
 
   const excluirRelatorioGerado = async (ids: string[]) => {
@@ -515,21 +423,14 @@ export default function DiariasDashboard() {
         fetchDiarias();
         await registrarLog('ESTORNO DE TABELA', `Desfez uma tabela exportada. ${ids.length} diárias retornaram para A Gerar.`);
         mostrarToast("Tabela desfeita. Diárias retornaram para a fila.", "info");
-      } catch (error) { 
-        mostrarToast("Erro ao desfazer relatório.", "erro"); 
-      } finally {
-        setIsProcessing(false);
-      }
+      } catch (error) { mostrarToast("Erro ao desfazer relatório.", "erro"); } finally { setIsProcessing(false); }
     }
   }
 
   const handleUploadComprovante = async (e: React.ChangeEvent<HTMLInputElement>, ids: string[], key: string) => {
     if (!isAdmin) return;
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setUploadingTabela(key);
-    setIsProcessing(true); setProcessMsg('A enviar o backup/comprovante...');
+    const file = e.target.files?.[0]; if (!file) return;
+    setUploadingTabela(key); setIsProcessing(true); setProcessMsg('A enviar o backup/comprovante...');
     
     try {
        const extensao = file.name.split('.').pop();
@@ -541,20 +442,12 @@ export default function DiariasDashboard() {
        await registrarLog('UPLOAD DE BACKUP', `Anexou um comprovativo de segurança para a tabela ${key}.`);
        mostrarToast("Cópia de segurança (Backup) anexada com sucesso!", "sucesso");
        fetchDiarias();
-    } catch (err: any) { 
-       mostrarToast("Erro ao enviar ficheiro: " + err.message, "erro"); 
-    } finally { 
-       setUploadingTabela(null);
-       setIsProcessing(false);
-    }
+    } catch (err: any) { mostrarToast("Erro ao enviar ficheiro: " + err.message, "erro"); } finally { setUploadingTabela(null); setIsProcessing(false); }
   }
 
   const handleUploadReciboIndividual = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setUploadingReciboId(id);
-    setIsProcessing(true); setProcessMsg('A enviar o recibo para a viagem...');
+    const file = e.target.files?.[0]; if (!file) return;
+    setUploadingReciboId(id); setIsProcessing(true); setProcessMsg('A enviar o recibo para a viagem...');
     
     try {
        const extensao = file.name.split('.').pop();
@@ -566,12 +459,7 @@ export default function DiariasDashboard() {
        await registrarLog('ANEXO INDIVIDUAL', `Anexou um recibo/foto para uma viagem individual.`);
        mostrarToast("Recibo anexado com sucesso!", "sucesso");
        fetchDiarias();
-    } catch (err: any) { 
-       mostrarToast("Erro ao anexar ficheiro: " + err.message, "erro"); 
-    } finally { 
-       setUploadingReciboId(null);
-       setIsProcessing(false);
-    }
+    } catch (err: any) { mostrarToast("Erro ao anexar ficheiro: " + err.message, "erro"); } finally { setUploadingReciboId(null); setIsProcessing(false); }
   }
 
   const fetchDiarias = useCallback(async () => {
@@ -600,87 +488,46 @@ export default function DiariasDashboard() {
   async function adicionarServidor(e: React.FormEvent) {
     e.preventDefault()
     if(!isAdmin || !novoServidor.nome) return;
-    
     setIsProcessing(true); setProcessMsg('A registar novo membro da equipa...');
     try {
       const { error } = await supabase.from('servidores').insert([{ nome: novoServidor.nome.toUpperCase(), cargo: novoServidor.cargo.toUpperCase() }])
-      if (error) { 
-        mostrarToast("Erro ao adicionar servidor.", "erro"); 
-      } else { 
+      if (error) { mostrarToast("Erro ao adicionar servidor.", "erro"); } else { 
         await registrarLog('GERENCIAMENTO', `Adicionou o servidor ${novoServidor.nome.toUpperCase()} à equipa.`);
-        setNovoServidor({ nome: '', cargo: '' }); 
-        fetchServidores(); 
-        mostrarToast("Membro da equipa adicionado!", "sucesso");
+        setNovoServidor({ nome: '', cargo: '' }); fetchServidores(); mostrarToast("Membro da equipa adicionado!", "sucesso");
       }
-    } finally {
-      setIsProcessing(false);
-    }
+    } finally { setIsProcessing(false); }
   }
 
   async function removerServidor(id: number) {
     if(!isAdmin) return;
-    
     const servidorDeletado = servidores.find(s => s.id === id);
-
     if(confirm("Remover este membro da equipa permanentemente?")) { 
       setIsProcessing(true); setProcessMsg('A remover membro...');
       try {
         await supabase.from('servidores').delete().eq('id', id); 
-        
-        const detalhesLog = servidorDeletado 
-          ? `Removeu o servidor ${servidorDeletado.nome} da lista de equipa.`
-          : `Removeu um servidor da lista de equipa.`;
-
+        const detalhesLog = servidorDeletado ? `Removeu o servidor ${servidorDeletado.nome} da lista de equipa.` : `Removeu um servidor da lista de equipa.`;
         await registrarLog('GERENCIAMENTO', detalhesLog);
-        
-        fetchServidores(); 
-        mostrarToast("Membro removido da equipa.", "info");
-      } finally {
-        setIsProcessing(false);
-      }
+        fetchServidores(); mostrarToast("Membro removido da equipa.", "info");
+      } finally { setIsProcessing(false); }
     }
   }
 
-  // --- FUNÇÕES DE BAIXA DE PAGAMENTO ---
   function abrirModalBaixa(ids: string[]) {
     if (!isAdmin) return;
-    setIdsParaBaixa(ids);
-    setDataBaixa(new Date().toISOString().split('T')[0]); // Seta a data atual como padrão
-    setModalBaixaAberto(true);
+    setIdsParaBaixa(ids); setDataBaixa(new Date().toISOString().split('T')[0]); setModalBaixaAberto(true);
   }
 
   async function confirmarBaixaTabela() {
     if (!isAdmin || idsParaBaixa.length === 0) return;
     setIsProcessing(true); setProcessMsg('A processar e arquivar tabela como Paga...');
-    
     try {
       const agora = new Date().toISOString();
-      // Ajusta a data para evitar problemas de fuso horário
       const dataPagamentoFormatada = new Date(`${dataBaixa}T12:00:00Z`).toISOString();
-
-      await Promise.all(idsParaBaixa.map(id => 
-        supabase.from('diarias').update({ 
-          pago: true, 
-          data_pagamento: dataPagamentoFormatada, 
-          updated_at: agora, 
-          usuario_alteracao: usuarioLogado 
-        }).eq('id', id)
-      ));
-      
-      setDiarias(prev => prev.map(d => idsParaBaixa.includes(d.id) ? { 
-        ...d, pago: true, data_pagamento: dataPagamentoFormatada, updated_at: agora, usuario_alteracao: usuarioLogado 
-      } : d));
-      
+      await Promise.all(idsParaBaixa.map(id => supabase.from('diarias').update({ pago: true, data_pagamento: dataPagamentoFormatada, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
+      setDiarias(prev => prev.map(d => idsParaBaixa.includes(d.id) ? { ...d, pago: true, data_pagamento: dataPagamentoFormatada, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
       await registrarLog('PAGAMENTO EM LOTE', `Marcou uma tabela inteira (${idsParaBaixa.length} viagens) como PAGA na data ${formatarDataBR(dataPagamentoFormatada)}.`);
-      
-      setModalBaixaAberto(false);
-      setIdsParaBaixa([]);
-      mostrarToast(`Tabela marcada como PAGA com sucesso!`, "sucesso");
-    } catch(err) {
-      mostrarToast(`Erro ao marcar como paga.`, "erro");
-    } finally {
-      setIsProcessing(false);
-    }
+      setModalBaixaAberto(false); setIdsParaBaixa([]); mostrarToast(`Tabela marcada como PAGA com sucesso!`, "sucesso");
+    } catch(err) { mostrarToast(`Erro ao marcar como paga.`, "erro"); } finally { setIsProcessing(false); }
   }
 
   async function desmarcarTabelaPaga(ids: string[]) {
@@ -692,36 +539,28 @@ export default function DiariasDashboard() {
         await Promise.all(ids.map(id => supabase.from('diarias').update({ pago: false, data_pagamento: null, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)));
         setDiarias(prev => prev.map(d => ids.includes(d.id) ? { ...d, pago: false, data_pagamento: null, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
         await registrarLog('ESTORNO DE PAGAMENTO', `Desmarcou uma tabela inteira (${ids.length} viagens) que estava PAGA.`);
-        fetchDiarias();
-        mostrarToast(`Pagamento desfeito! A tabela voltou para as pendências.`, "info");
-      } finally {
-        setIsProcessing(false);
-      }
+        fetchDiarias(); mostrarToast(`Pagamento desfeito! A tabela voltou para as pendências.`, "info");
+      } finally { setIsProcessing(false); }
     }
   }
 
   const diariasFiltradas = diarias.filter(d => {
-    // --- ADICIONADO OBJETIVO NA BUSCA ---
     const busca = ((d.nome || "") + (d.adolescente_nome || "") + (d.numero_processo || "") + (d.local_viagem || "") + (d.objetivo || "")).toLowerCase()
     const matchesPesquisa = busca.includes(pesquisa.toLowerCase())
     const matchesMetodo = filtroMetodo === 'TODOS' || d.metodo_pagamento === filtroMetodo
     let matchesStatus = true;
     if (filtroStatus === 'PAGO') matchesStatus = d.pago === true;
     if (filtroStatus === 'PENDENTE') matchesStatus = d.pago === false;
-    
     let matchesPeriodo = true;
     if (dataInicioRelatorio) matchesPeriodo = matchesPeriodo && d.data_viagem >= dataInicioRelatorio;
     if (dataFimRelatorio) matchesPeriodo = matchesPeriodo && d.data_viagem <= dataFimRelatorio;
-
     return matchesPesquisa && matchesMetodo && matchesStatus && matchesPeriodo;
   }).sort((a, b) => {
-    const dataA = new Date(a.data_viagem).getTime() || 0
-    const dataB = new Date(b.data_viagem).getTime() || 0
+    const dataA = new Date(a.data_viagem).getTime() || 0; const dataB = new Date(b.data_viagem).getTime() || 0;
     if (ordemData === 'DESC') return dataB - dataA; else return dataA - dataB;
   })
 
   const diariasParaGraficos = diarias.filter(d => {
-    // --- ADICIONADO OBJETIVO NA BUSCA ---
     const busca = ((d.nome || "") + (d.adolescente_nome || "") + (d.numero_processo || "") + (d.local_viagem || "") + (d.objetivo || "")).toLowerCase()
     const matchesPesquisa = busca.includes(pesquisa.toLowerCase())
     const matchesMetodo = filtroMetodo === 'TODOS' || d.metodo_pagamento === filtroMetodo
@@ -734,11 +573,7 @@ export default function DiariasDashboard() {
   const dashboardGastoTotal = diariasParaGraficos.reduce((acc, d) => acc + (Number(d.valor) || 0), 0);
   const dashboardGastoSEI = diariasParaGraficos.filter(d => d.metodo_pagamento === 'SEI').reduce((acc, d) => acc + (Number(d.valor) || 0), 0);
   const dashboardGastoSalario = diariasParaGraficos.filter(d => d.metodo_pagamento === 'CONTA SALARIO').reduce((acc, d) => acc + (Number(d.valor) || 0), 0);
-  
-  const gastosPorPessoa = diariasParaGraficos.reduce((acc: any, d) => {
-    acc[d.nome] = (acc[d.nome] || 0) + (Number(d.valor) || 0);
-    return acc;
-  }, {});
+  const gastosPorPessoa = diariasParaGraficos.reduce((acc: any, d) => { acc[d.nome] = (acc[d.nome] || 0) + (Number(d.valor) || 0); return acc; }, {});
   const rankingTop5 = Object.entries(gastosPorPessoa).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5);
   const maiorValorRanking = rankingTop5.length > 0 ? Number(rankingTop5[0][1]) : 1;
 
@@ -747,24 +582,15 @@ export default function DiariasDashboard() {
   const salvarEdicao = async () => {
     if(!isAdmin) return;
     setIsProcessing(true); setProcessMsg('A salvar as alterações da viagem...');
-    
     try {
       const agora = new Date().toISOString();
       const valorFormatado = dadosEditados.valor ? parseFloat(parseFloat(dadosEditados.valor.toString()).toFixed(2)) : 0;
       const dadosFinais = { ...dadosEditados, valor: valorFormatado, updated_at: agora, usuario_alteracao: usuarioLogado };
       const { error } = await supabase.from('diarias').update(dadosFinais).eq('id', idEditando)
-      
       if (!error) { 
-        setIdEditando(null); 
-        fetchDiarias(); 
-        await registrarLog('EDIÇÃO', `Atualizou os dados da viagem de ${dadosFinais.nome}.`);
-        mostrarToast("Registo atualizado com sucesso!", "sucesso");
-      } else { 
-        mostrarToast("Erro ao salvar edição: " + error.message, "erro"); 
-      }
-    } finally {
-      setIsProcessing(false);
-    }
+        setIdEditando(null); fetchDiarias(); await registrarLog('EDIÇÃO', `Atualizou os dados da viagem de ${dadosFinais.nome}.`); mostrarToast("Registo atualizado com sucesso!", "sucesso");
+      } else { mostrarToast("Erro ao salvar edição: " + error.message, "erro"); }
+    } finally { setIsProcessing(false); }
   }
 
   async function cadastrarDiaria(e: React.FormEvent<HTMLFormElement>) {
@@ -775,14 +601,10 @@ export default function DiariasDashboard() {
     const localFinal = formLocal || (formData.get('local') as string)
     const adolescenteFinal = formData.get('adolescente_nome') as string
     const dataFinal = formData.get('data') as string
-    const objetivoFinal = formObjetivo || (formData.get('objetivo') as string) // <-- RESGATANDO OBJETIVO
+    const objetivoFinal = formObjetivo || (formData.get('objetivo') as string)
 
-    // --- TRAVA DE SEGURANÇA: VERIFICAR DUPLICIDADE ---
     const diariaDuplicada = diarias.find(d => 
-      d.nome === nomeFinal.toUpperCase() &&
-      d.data_viagem === dataFinal &&
-      d.local_viagem === localFinal.toUpperCase() &&
-      d.metodo_pagamento === metodoSelecionado
+      d.nome === nomeFinal.toUpperCase() && d.data_viagem === dataFinal && d.local_viagem === localFinal.toUpperCase() && d.metodo_pagamento === metodoSelecionado
     );
 
     if (diariaDuplicada) {
@@ -795,13 +617,8 @@ export default function DiariasDashboard() {
         `- Método: ${metodoSelecionado}\n\n` +
         `Deseja ignorar este aviso e cadastrar mesmo assim? (Clique em "Cancelar" para abortar)`
       );
-      
-      if (!confirmarDuplicidade) {
-        mostrarToast("Cadastro abortado para evitar duplicidade.", "info");
-        return; 
-      }
+      if (!confirmarDuplicidade) { mostrarToast("Cadastro abortado para evitar duplicidade.", "info"); return; }
     }
-    // ------------------------------------------------------
 
     setIsProcessing(true); setProcessMsg('A registar a nova viagem...');
 
@@ -813,7 +630,7 @@ export default function DiariasDashboard() {
         nome: nomeFinal.toUpperCase(),
         cargo: cargoFinal.toUpperCase(),
         adolescente_nome: adolescenteFinal.toUpperCase(),
-        objetivo: objetivoFinal.toUpperCase(), // <-- SALVANDO OBJETIVO
+        objetivo: metodoSelecionado === 'CONTA SALARIO' ? objetivoFinal.toUpperCase() : null, // Só salva objetivo se for Salário
         data_viagem: dataFinal,
         local_viagem: localFinal.toUpperCase(),
         valor: valorCorrigido,
@@ -833,61 +650,38 @@ export default function DiariasDashboard() {
       await fetchDiarias();
       
       if (manterDados) {
-        setFormNome(""); 
-        mostrarToast("Salvo! Dados mantidos para o próximo.", "sucesso");
+        setFormNome(""); mostrarToast("Salvo! Dados mantidos para o próximo.", "sucesso");
       } else {
-        form.reset(); setFormNome(""); setFormCargo(""); setFormLocal(""); setFormObjetivo(""); // <-- LIMPANDO OBJETIVO
+        form.reset(); setFormNome(""); setFormCargo(""); setFormLocal(""); setFormObjetivo("");
         mostrarToast("Nova diária cadastrada com sucesso!", "sucesso");
       }
-    } catch (err) { 
-      mostrarToast("Erro inesperado ao salvar.", "erro"); 
-    } finally {
-      setIsProcessing(false);
-    }
+    } catch (err) { mostrarToast("Erro inesperado ao salvar.", "erro"); } finally { setIsProcessing(false); }
   }
 
   async function alternarPagamento(id: string, statusAtual: boolean) {
     if(!isAdmin) return;
-    
     setIsProcessing(true); setProcessMsg('A alterar estado da viagem...');
     try {
       const agora = new Date().toISOString()
       await supabase.from('diarias').update({ pago: !statusAtual, data_pagamento: !statusAtual ? agora : null, updated_at: agora, usuario_alteracao: usuarioLogado }).eq('id', id)
-      
       setDiarias(prev => prev.map(d => d.id === id ? { ...d, pago: !statusAtual, data_pagamento: !statusAtual ? agora : null, updated_at: agora, usuario_alteracao: usuarioLogado } : d));
-      
       await registrarLog('STATUS', `Marcou uma diária como ${!statusAtual ? 'PAGA' : 'PENDENTE'}.`);
-      fetchDiarias()
-      if(!statusAtual) mostrarToast("Diária marcada como PAGA!", "sucesso");
-      else mostrarToast("Pagamento desmarcado (Pendente).", "info");
-    } finally {
-      setIsProcessing(false);
-    }
+      fetchDiarias();
+      if(!statusAtual) mostrarToast("Diária marcada como PAGA!", "sucesso"); else mostrarToast("Pagamento desmarcado (Pendente).", "info");
+    } finally { setIsProcessing(false); }
   }
 
   async function excluirDiaria(id: string) {
     if(!isAdmin) return;
-    
-    // 1. Encontra os dados exatos do registro ANTES de excluí-lo
     const registroDeletado = diarias.find(d => d.id === id);
-    
     if (confirm("Excluir este registo permanentemente?")) { 
       setIsProcessing(true); setProcessMsg('A excluir o registo definitivamente...');
       try {
         await supabase.from('diarias').delete().eq('id', id); 
-        
-        // 2. Cria uma mensagem detalhada para a auditoria
-        const detalhesLog = registroDeletado 
-          ? `Excluiu a viagem de ${registroDeletado.nome} (Destino: ${registroDeletado.local_viagem} | R$ ${Number(registroDeletado.valor).toFixed(2)}).`
-          : `Removeu definitivamente um registo desconhecido do sistema.`;
-
+        const detalhesLog = registroDeletado ? `Excluiu a viagem de ${registroDeletado.nome} (Destino: ${registroDeletado.local_viagem} | R$ ${Number(registroDeletado.valor).toFixed(2)}).` : `Removeu definitivamente um registo desconhecido do sistema.`;
         await registrarLog('EXCLUSÃO', detalhesLog);
-        
-        fetchDiarias(); 
-        mostrarToast("Registo excluído.", "info");
-      } finally {
-        setIsProcessing(false);
-      }
+        fetchDiarias(); mostrarToast("Registo excluído.", "info");
+      } finally { setIsProcessing(false); }
     }
   }
 
@@ -903,7 +697,6 @@ export default function DiariasDashboard() {
       else if (d.metodo_pagamento === 'SEI') infoMetodo = `(SEI: Sem Nº)`;
       texto += `⚠️ *PENDENTE* ${infoMetodo}\n📅 Data: ${formatarDataBR(d.data_viagem)}\n👤 Servidor: ${d.nome}\n💰 Valor: R$ ${Number(d.valor).toFixed(2)}\n----------------\n`;
     });
-    
     const total = pendentes.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
     texto += `\n*TOTAL A PAGAR: R$ ${total.toFixed(2)}*`;
     window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
@@ -916,7 +709,6 @@ export default function DiariasDashboard() {
   if (!estaAutenticado) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 to-slate-900 p-4 relative overflow-hidden">
-        
         {isProcessing && (
           <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
             <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-pulse">
@@ -925,21 +717,14 @@ export default function DiariasDashboard() {
             </div>
           </div>
         )}
-
         {toast && (
-          <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm text-white flex items-center gap-3 animate-slideDown ${
-            toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'
-          }`}>
-            <span className="text-xl">{toast.tipo === 'sucesso' ? '✅' : toast.tipo === 'erro' ? '⚠️' : 'ℹ️'}</span>
-            {toast.msg}
+          <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm text-white flex items-center gap-3 animate-slideDown ${toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'}`}>
+            <span className="text-xl">{toast.tipo === 'sucesso' ? '✅' : toast.tipo === 'erro' ? '⚠️' : 'ℹ️'}</span>{toast.msg}
           </div>
         )}
         <div className="absolute bottom-4 text-slate-600 text-[10px] uppercase font-bold tracking-widest opacity-50">Versão Seguro/LGPD • Dev: Educador Social Junior</div>
         <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm flex flex-col items-center border-t-8 border-blue-600 relative z-10 transition-all">
-          <div className="mb-6 text-center">
-            <h1 className="text-4xl font-black text-slate-900 italic tracking-tighter mb-1">CSIPRC</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">Acesso Restrito</p>
-          </div>
+          <div className="mb-6 text-center"><h1 className="text-4xl font-black text-slate-900 italic tracking-tighter mb-1">CSIPRC</h1><p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">Acesso Restrito</p></div>
           <form onSubmit={lidarComLogin} className="w-full flex flex-col gap-3">
             <input type="email" placeholder="E-MAIL" className="input-login" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} required />
             <input type="password" placeholder="SENHA" className="input-login" value={senhaInput} onChange={(e) => setSenhaInput(e.target.value)} required />
@@ -947,55 +732,31 @@ export default function DiariasDashboard() {
             <button className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-xl uppercase text-xs tracking-widest mt-2" disabled={isProcessing}>ENTRAR</button>
           </form>
         </div>
-        <style jsx>{`
-          .input-login { width: 100%; background-color: #f1f5f9; border: 2px solid #94a3b8; padding: 1rem; border-radius: 0.75rem; text-align: center; font-weight: 800; outline: none; color: #000000; transition: all 0.2s; }
-          .input-login::placeholder { color: #334155; opacity: 1; }
-          .input-login:focus { border-color: #2563eb; background-color: #ffffff; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-          @keyframes slideDown { 0% { transform: translate(-50%, -150%); opacity: 0; } 100% { transform: translate(-50%, 0); opacity: 1; } }
-          .animate-slideDown { animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-          @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
-          .animate-fadeIn { animation: fadeIn 0.3s ease forwards; }
-        `}</style>
+        <style jsx>{`.input-login { width: 100%; background-color: #f1f5f9; border: 2px solid #94a3b8; padding: 1rem; border-radius: 0.75rem; text-align: center; font-weight: 800; outline: none; color: #000000; transition: all 0.2s; } .input-login::placeholder { color: #334155; opacity: 1; } .input-login:focus { border-color: #2563eb; background-color: #ffffff; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); } @keyframes slideDown { 0% { transform: translate(-50%, -150%); opacity: 0; } 100% { transform: translate(-50%, 0); opacity: 1; } } .animate-slideDown { animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; } @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } } .animate-fadeIn { animation: fadeIn 0.3s ease forwards; }`}</style>
       </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-28 relative">
-      
-      {/* TELA DE CARREGAMENTO GLOBAL (OVERLAY) */}
       {isProcessing && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-pulse">
-            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="font-black text-slate-800 uppercase tracking-widest text-xs text-center">{processMsg}</p>
-          </div>
+          <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-pulse"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div><p className="font-black text-slate-800 uppercase tracking-widest text-xs text-center">{processMsg}</p></div>
         </div>
       )}
 
       {toast && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-3 sm:px-6 sm:py-4 rounded-2xl shadow-2xl font-bold text-xs sm:text-sm text-white flex items-center gap-3 animate-slideDown w-11/12 max-w-md ${
-          toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'
-        }`}>
-          <span className="text-lg sm:text-xl shrink-0">{toast.tipo === 'sucesso' ? '✅' : toast.tipo === 'erro' ? '⚠️' : 'ℹ️'}</span>
-          <span className="break-words">{toast.msg}</span>
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-3 sm:px-6 sm:py-4 rounded-2xl shadow-2xl font-bold text-xs sm:text-sm text-white flex items-center gap-3 animate-slideDown w-11/12 max-w-md ${toast.tipo === 'sucesso' ? 'bg-green-600' : toast.tipo === 'erro' ? 'bg-red-600' : 'bg-blue-600'}`}>
+          <span className="text-lg sm:text-xl shrink-0">{toast.tipo === 'sucesso' ? '✅' : toast.tipo === 'erro' ? '⚠️' : 'ℹ️'}</span><span className="break-words">{toast.msg}</span>
         </div>
       )}
 
-      {/* MODAL DE DAR BAIXA (DATA) */}
       {isAdmin && modalBaixaAberto && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-6 relative">
             <h2 className="text-xl font-black text-slate-800 mb-2 uppercase italic flex items-center gap-2">💰 Dar Baixa</h2>
             <p className="text-xs text-slate-500 mb-4">Selecione a data exata em que o dinheiro caiu na conta:</p>
-            
-            <input 
-              type="date" 
-              value={dataBaixa} 
-              onChange={(e) => setDataBaixa(e.target.value)} 
-              className="w-full border p-3 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-green-500 mb-6 bg-slate-50 cursor-pointer"
-            />
-            
+            <input type="date" value={dataBaixa} onChange={(e) => setDataBaixa(e.target.value)} className="w-full border p-3 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-green-50 mb-6 bg-slate-50 cursor-pointer" />
             <div className="flex gap-3">
               <button onClick={confirmarBaixaTabela} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg text-xs uppercase transition-colors" disabled={isProcessing}>Confirmar Baixa</button>
               <button onClick={() => setModalBaixaAberto(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 rounded-lg text-xs uppercase transition-colors" disabled={isProcessing}>Cancelar</button>
@@ -1004,27 +765,20 @@ export default function DiariasDashboard() {
         </div>
       )}
 
-      {/* MODAL DE AUDITORIA (LOGS) */}
       {isAdmin && mostrarLogs && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl p-6 relative flex flex-col max-h-[90vh]">
             <button onClick={() => setMostrarLogs(false)} className="absolute top-4 right-4 bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 w-8 h-8 rounded-full font-bold">X</button>
             <h2 className="text-xl font-black text-slate-800 mb-2 uppercase italic flex items-center gap-2">🕵️‍♂️ Auditoria (Histórico)</h2>
             <p className="text-xs text-slate-500 mb-6">Registo das últimas 1000 ações executadas no sistema.</p>
-            
             <div className="overflow-y-auto space-y-3 pr-2 custom-scrollbar flex-1">
               {logs.map(log => (
                 <div key={log.id} className="flex flex-col sm:flex-row justify-between sm:items-center bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-100 gap-2">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[9px] font-black text-white bg-slate-800 px-2 py-1 rounded uppercase tracking-wider">{log.acao}</span>
-                      <span className="text-[10px] font-bold text-slate-500">{new Date(log.created_at).toLocaleString('pt-BR')}</span>
-                    </div>
+                    <div className="flex items-center gap-2 mb-1"><span className="text-[9px] font-black text-white bg-slate-800 px-2 py-1 rounded uppercase tracking-wider">{log.acao}</span><span className="text-[10px] font-bold text-slate-500">{new Date(log.created_at).toLocaleString('pt-BR')}</span></div>
                     <p className="text-xs font-bold text-slate-700">{log.detalhes}</p>
                   </div>
-                  <div className="text-left sm:text-right mt-1 sm:mt-0">
-                    <span className="text-[10px] font-bold text-blue-600 uppercase bg-blue-50 border border-blue-100 px-2 py-1 rounded">{log.usuario}</span>
-                  </div>
+                  <div className="text-left sm:text-right mt-1 sm:mt-0"><span className="text-[10px] font-bold text-blue-600 uppercase bg-blue-50 border border-blue-100 px-2 py-1 rounded">{log.usuario}</span></div>
                 </div>
               ))}
               {logs.length === 0 && <p className="text-center text-slate-400 text-xs italic mt-10">Nenhum registo encontrado ainda.</p>}
@@ -1067,32 +821,23 @@ export default function DiariasDashboard() {
         </div>
       )}
 
-      {/* --- MENU SUPERIOR (NAVBAR) INTELIGENTE E FINO --- */}
       <nav className={`bg-white border-b sticky top-0 z-50 w-full transition-all duration-300 ${isScrolled ? 'shadow-md py-2' : 'shadow-sm py-4'}`}>
         <div className="max-w-[1600px] mx-auto px-4 flex flex-col gap-3">
-          
-          {/* LINHA 1: Cabeçalho, Identificação e Botões Principais */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-3">
               <h1 className={`font-black uppercase italic tracking-tighter text-slate-800 transition-all ${isScrolled ? 'text-lg' : 'text-xl sm:text-2xl'}`}>Gestão CSIPRC</h1>
-              <div className="flex items-center gap-2 border-l pl-3 ml-2 border-slate-200">
-                <span className="text-[10px] font-bold text-blue-600 uppercase truncate max-w-[120px] sm:max-w-[200px]" title={usuarioLogado}>Olá, {usuarioLogado}</span>
-                {isAdmin && <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider hidden sm:inline-block">Admin</span>}
-                <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 px-2 py-1 rounded shrink-0">SAIR</button>
+              <div className="flex items-center gap-2 border-l pl-3 ml-1 border-slate-200">
+                <span className="text-[10px] font-bold text-blue-600 uppercase hidden sm:inline-block">Olá, {usuarioLogado}</span>
+                {isAdmin && <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Admin</span>}
+                <button onClick={() => {if(confirm('Sair do sistema?')) fazerLogout()}} className="text-[9px] font-bold text-red-400 hover:text-red-600 bg-red-50 px-2 py-1 rounded">SAIR</button>
               </div>
             </div>
             
             <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                {/* Botão Responsável por Mostrar/Ocultar os Filtros */}
-                <button 
-                  onClick={() => setFiltrosAbertos(!filtrosAbertos)} 
-                  className={`flex items-center gap-1 px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-colors ${filtrosAbertos ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                >
+                <button onClick={() => setFiltrosAbertos(!filtrosAbertos)} className={`flex items-center gap-1 px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-colors ${filtrosAbertos ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                   {filtrosAbertos ? 'Esconder Filtros ⬆️' : 'Mostrar Filtros ⬇️'}
                 </button>
-
                 <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
-
                 <button onClick={() => setMostrarPortal(true)} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-lg text-[10px] font-black hover:bg-slate-200 uppercase text-center hidden sm:block">🔍 Portal</button>
                 {isAdmin && (
                   <>
@@ -1104,36 +849,29 @@ export default function DiariasDashboard() {
             </div>
           </div>
           
-          {/* LINHA 2: Bloco de Filtros Agrupados (Recolhe no Scroll) */}
           <div className={`transition-all duration-300 overflow-hidden origin-top ${filtrosAbertos ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
             <div className="flex flex-col xl:flex-row gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-              
-              {/* Busca e Botão Equipe */}
               <div className="flex-1 flex gap-2">
                 <input type="text" placeholder="🔍 Buscar Servidor ou Destino..." className="flex-1 bg-white border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 font-bold uppercase" value={pesquisa} onChange={(e) => setPesquisa(e.target.value)} />
                 {isAdmin && <button onClick={() => setMostrarGerenciarEquipe(true)} className="shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black transition-all bg-slate-900 text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 uppercase">⚙️ Equipa</button>}
               </div>
 
-              {/* Botões de Filtro: Método, Status e Ordenação */}
               <div className="flex flex-wrap gap-2">
                 <div className="flex bg-white border border-slate-200 p-1 rounded-xl">
                   {['TODOS', 'SEI', 'CONTA SALARIO'].map(f => (
                     <button key={f} onClick={() => setFiltroMetodo(f)} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all ${filtroMetodo === f ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>{f === 'CONTA SALARIO' ? 'SALÁRIO' : f}</button>
                   ))}
                 </div>
-
                 <div className="flex bg-white border border-slate-200 p-1 rounded-xl">
                   <button onClick={() => setFiltroStatus('PENDENTE')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 ${filtroStatus === 'PENDENTE' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>⏳ PENDENTES</button>
                   <button onClick={() => setFiltroStatus('PAGO')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all flex items-center gap-1 ${filtroStatus === 'PAGO' ? 'bg-green-500 text-white shadow-sm' : 'text-slate-500 hover:bg-green-50 hover:text-green-600'}`}>✅ PAGOS</button>
                   <button onClick={() => setFiltroStatus('TODOS')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black transition-all ${filtroStatus === 'TODOS' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>VER TUDO</button>
                 </div>
-                
                 <button onClick={() => setOrdemData(prev => prev === 'DESC' ? 'ASC' : 'DESC')} className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-[9px] font-black transition-all text-blue-700 hover:bg-blue-50 flex items-center gap-1 uppercase">
                   {ordemData === 'ASC' ? '⬆️ ANTIGAS' : '⬇️ RECENTES'}
                 </button>
               </div>
 
-              {/* Filtros de Data (De/Até e Botões Rápidos) */}
               <div className="flex flex-col gap-1 w-full xl:w-auto">
                 <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200">
                   <input type="date" value={dataInicioRelatorio} onChange={(e) => setDataInicioRelatorio(e.target.value)} className="bg-transparent p-1 rounded-lg text-[10px] font-bold text-slate-700 outline-none cursor-pointer flex-1" />
@@ -1149,16 +887,13 @@ export default function DiariasDashboard() {
                   <button onClick={() => aplicarFiltroRapido('ESTE_MES')} className="flex-1 text-[8px] bg-white border border-slate-200 hover:bg-blue-50 text-slate-500 hover:text-blue-700 py-1 rounded font-bold uppercase transition-colors">Mês</button>
                 </div>
               </div>
-
             </div>
           </div>
         </div>
       </nav>
 
-      {/* --- NOVO LAYOUT PRINCIPAL: DASHBOARD COM BARRA LATERAL ESQUERDA (SIDEBAR) --- */}
       <main className="max-w-[1600px] mx-auto p-4 lg:p-6 w-full flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
         
-        {/* --- LADO ESQUERDO: BARRA LATERAL FIXA (FORMULÁRIO DE CADASTRO) --- */}
         <aside className="w-full lg:w-[320px] xl:w-[380px] shrink-0 lg:sticky lg:top-[80px] z-40">
           <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 flex flex-col h-auto lg:h-[calc(100vh-6.5rem)]">
             <h2 className="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest shrink-0">Novo Registo</h2>
@@ -1166,10 +901,14 @@ export default function DiariasDashboard() {
               <form onSubmit={cadastrarDiaria} className="flex flex-col gap-3">
                 <AutocompleteInput name="nome" placeholder="Nome do Servidor" value={formNome} onChange={(e: any) => { setFormNome(e.target.value); const serv = servidores.find(s => s.nome.toUpperCase() === e.target.value.toUpperCase()); if(serv && serv.cargo) setFormCargo(serv.cargo); }} sugestoes={sugestoesNomes} required />
                 {metodoSelecionado === 'CONTA SALARIO' && <AutocompleteInput name="cargo" placeholder="Cargo" value={formCargo} onChange={(e: any) => setFormCargo(e.target.value)} sugestoes={sugestoesCargos} />}
-                <input name="adolescente_nome" placeholder="Adolescente / Motivo" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
                 
-                {/* --- CAMPO OBJETIVO ADICIONADO AQUI --- */}
-                <input name="objetivo" placeholder="Objetivo (Ex: Transferência)" value={formObjetivo} onChange={(e) => setFormObjetivo(e.target.value.toUpperCase())} className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
+                {/* --- CAMPO ADOLESCENTE AGORA É TEXTAREA PARA PULAR LINHA (MULTILINE) --- */}
+                <textarea name="adolescente_nome" placeholder="Adolescente(s) / Motivo (Pode pular linha p/ vários)" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full resize-y" rows={2} onInput={(e) => e.currentTarget.value = e.currentTarget.value.toUpperCase()} required />
+                
+                {/* --- CAMPO OBJETIVO CONDICIONAL: SÓ APARECE SE FOR CONTA SALÁRIO --- */}
+                {metodoSelecionado === 'CONTA SALARIO' && (
+                  <input name="objetivo" placeholder="Objetivo (Ex: Transferência)" value={formObjetivo} onChange={(e) => setFormObjetivo(e.target.value.toUpperCase())} className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
+                )}
                 
                 <div className="grid grid-cols-2 gap-2">
                   <input name="data" type="date" className="border p-2.5 sm:p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500 w-full" required />
@@ -1200,7 +939,6 @@ export default function DiariasDashboard() {
           </div>
         </aside>
 
-        {/* --- LADO DIREITO: DADOS CADASTRADOS, GRÁFICOS E LISTAS --- */}
         <section className="flex-1 w-full min-w-0 flex flex-col gap-6">
           
           {isAdmin && (
@@ -1274,7 +1012,6 @@ export default function DiariasDashboard() {
             </div>
           )}
 
-          {/* --- GERENCIADOR DE TABELAS (PENDENTES E PAGAS) --- */}
           {isAdmin && (tabelasPendentesArray.length > 0 || tabelasPagasArray.length > 0) && (
             <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-100 w-full">
               <div className="flex justify-between items-center mb-4">
@@ -1369,45 +1106,39 @@ export default function DiariasDashboard() {
             </div>
           )}
 
-          {/* --- LISTA DE REGISTROS DE VIAGENS --- */}
           <div className="grid grid-cols-1 gap-4 w-full">
             {diariasFiltradas.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-10 sm:p-20 opacity-50"><div className="text-4xl mb-2">📭</div><p className="font-bold text-slate-400 text-sm text-center">Nenhum registo encontrado.</p></div>
             ) : (
-              /* --- LIMITANDO A RENDERIZAÇÃO PARA PAGINAÇÃO --- */
               diariasFiltradas.slice(0, limiteVisivel).map((item) => (
                 <div key={item.id} className={`bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border-l-[8px] sm:border-l-[12px] transition-all duration-300 ${item.pago ? 'border-green-500 bg-slate-50 opacity-90 hover:opacity-100' : 'border-red-500 shadow-md transform hover:-translate-y-1'}`}>
                   
-                  {/* --- FORMULÁRIO DE EDIÇÃO COMPLETO --- */}
                   {idEditando === item.id ? (
                     <div className="bg-blue-50 p-4 sm:p-6 rounded-2xl border-2 border-blue-200 shadow-xl space-y-4 relative">
                       <h3 className="font-black text-blue-800 uppercase italic mb-2 text-sm text-center sm:text-left">✏️ Editando Registo</h3>
-                      
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.nome || ""} onChange={e => setDadosEditados({...dadosEditados, nome: e.target.value.toUpperCase()})} placeholder="Nome do Servidor" />
-                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.adolescente_nome || ""} onChange={e => setDadosEditados({...dadosEditados, adolescente_nome: e.target.value.toUpperCase()})} placeholder="Adolescente / Motivo" />
                          
-                         {/* --- CAMPO OBJETIVO NO MODO DE EDIÇÃO --- */}
-                         <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.objetivo || ""} onChange={e => setDadosEditados({...dadosEditados, objetivo: e.target.value.toUpperCase()})} placeholder="Objetivo (Ex: Transferência)" />
+                         {/* --- CAMPO ADOLESCENTE NO MODO DE EDIÇÃO --- */}
+                         <textarea className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500 resize-y" value={dadosEditados.adolescente_nome || ""} onChange={e => setDadosEditados({...dadosEditados, adolescente_nome: e.target.value.toUpperCase()})} placeholder="Adolescente(s) / Motivo" rows={2} />
+                         
+                         {/* --- CAMPO OBJETIVO CONDICIONAL NO MODO DE EDIÇÃO --- */}
+                         {dadosEditados.metodo_pagamento === 'CONTA SALARIO' && (
+                           <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.objetivo || ""} onChange={e => setDadosEditados({...dadosEditados, objetivo: e.target.value.toUpperCase()})} placeholder="Objetivo (Ex: Transferência)" />
+                         )}
                          
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.local_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, local_viagem: e.target.value.toUpperCase()})} placeholder="Destino / Cidade" />
                          <input type="date" className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.data_viagem || ""} onChange={e => setDadosEditados({...dadosEditados, data_viagem: e.target.value})} />
-                         
                          <select className="border p-2.5 sm:p-3 rounded-lg text-sm w-full font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.metodo_pagamento || "SEI"} onChange={e => setDadosEditados({...dadosEditados, metodo_pagamento: e.target.value})}>
                            <option value="SEI">SISTEMA SEI</option>
                            <option value="CONTA SALARIO">CONTA SALÁRIO</option>
                          </select>
-                         
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.numero_processo || ""} onChange={e => setDadosEditados({...dadosEditados, numero_processo: e.target.value.toUpperCase()})} placeholder="Nº Processo SEI" />
-                         
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.valor || ""} type="number" step="0.01" onChange={e => setDadosEditados({...dadosEditados, valor: e.target.value})} placeholder="Valor (R$)" />
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full uppercase outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.cargo || ""} onChange={e => setDadosEditados({...dadosEditados, cargo: e.target.value.toUpperCase()})} placeholder="Cargo" />
-                         
                          <input className="border p-2.5 sm:p-3 rounded-lg text-sm w-full outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.quantidade || ""} type="number" onChange={e => setDadosEditados({...dadosEditados, quantidade: e.target.value})} placeholder="Qtd. Diárias" />
-                         
                          <textarea className="col-span-1 sm:col-span-2 border p-2.5 sm:p-3 rounded-lg text-sm w-full resize-none outline-none focus:ring-2 focus:ring-blue-500" value={dadosEditados.observacoes || ""} onChange={e => setDadosEditados({...dadosEditados, observacoes: e.target.value})} placeholder="Observações..." rows={2} />
                       </div>
-                      
                       <div className="flex flex-col sm:flex-row gap-3 mt-4">
                          <button onClick={salvarEdicao} className="w-full sm:w-auto flex-1 bg-green-600 hover:bg-green-700 text-white p-3.5 rounded-xl font-black uppercase text-[10px] shadow-md transition-colors" disabled={isProcessing}>💾 Salvar Alterações</button>
                          <button onClick={() => setIdEditando(null)} className="w-full sm:w-auto flex-1 bg-slate-300 hover:bg-slate-400 text-slate-800 p-3.5 rounded-xl font-black uppercase text-[10px] transition-colors" disabled={isProcessing}>❌ Cancelar</button>
@@ -1425,11 +1156,13 @@ export default function DiariasDashboard() {
                         </div>
                         
                         <h3 className="font-black text-slate-800 uppercase text-base sm:text-lg leading-tight break-words">{item.nome}</h3>
-                        <p className="text-xs font-bold text-blue-600 uppercase mt-1 break-words">👦 {item.adolescente_nome}</p>
+                        
+                        {/* --- PERMITINDO QUEBRA DE LINHA AQUI --- */}
+                        <p className="text-xs font-bold text-blue-600 uppercase mt-1 break-words whitespace-pre-wrap">👦 {item.adolescente_nome}</p>
                         
                         <div className="mt-3 bg-slate-50 sm:bg-white border border-slate-100 p-3 rounded-xl text-[11px] sm:text-xs space-y-1.5 text-slate-600">
                           {/* --- MOSTRANDO OBJETIVO NO CARD --- */}
-                          {item.objetivo && (
+                          {item.objetivo && item.metodo_pagamento === 'CONTA SALARIO' && (
                             <p className="uppercase flex items-start gap-2">🎯 <span className="font-bold text-slate-800 break-words">{item.objetivo}</span></p>
                           )}
                           <p className="flex items-start gap-2">📍 <span className="font-bold text-slate-800 uppercase flex-1 break-words">{item.local_viagem}</span></p>
@@ -1438,19 +1171,14 @@ export default function DiariasDashboard() {
                           
                           <div className="mt-3 pt-3 border-t border-slate-200 sm:border-slate-100 flex flex-wrap gap-2">
                              {item.recibo_url ? (
-                               <a href={item.recibo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors break-words">
-                                 📄 Ver Recibo Anexado
-                               </a>
+                               <a href={item.recibo_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors break-words">📄 Ver Recibo Anexado</a>
                              ) : (
                                <label className="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 cursor-pointer transition-colors break-words">
                                  {uploadingReciboId === item.id ? '⏳ A enviar...' : '📎 Anexar Recibo'}
                                  <input type="file" className="hidden" accept="image/*,.pdf" disabled={uploadingReciboId === item.id} onChange={(e) => handleUploadReciboIndividual(e, item.id)} />
                                </label>
                              )}
-
-                             <button onClick={() => gerarReciboPDF(item)} className="text-[10px] font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 transition-colors break-words">
-                               🖨️ Imprimir Recibo
-                             </button>
+                             <button onClick={() => gerarReciboPDF(item)} className="text-[10px] font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 hover:bg-slate-200 transition-colors break-words">🖨️ Imprimir Recibo</button>
                           </div>
                         </div>
                       </div>
@@ -1458,34 +1186,19 @@ export default function DiariasDashboard() {
                       <div className="sm:text-right flex flex-col justify-between items-start sm:items-end border-t sm:border-t-0 pt-4 sm:pt-0 mt-2 sm:mt-0 shrink-0">
                         <div className="text-left sm:text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end">
                            <p className="font-black text-slate-900 text-xl sm:text-2xl break-words">R$ {Number(item.valor).toFixed(2).replace('.', ',')}</p>
-                           
-                           {/* Renderizando QUEM CADASTROU E QUEM EDITOU claramente */}
                            <div className="text-[8px] sm:text-[9px] text-slate-400 sm:mt-2 space-y-1 text-right flex flex-col items-end">
                              {item.created_at && (
-                               <p className="flex items-center justify-end gap-1 flex-wrap">
-                                 ➕ {new Date(item.created_at).toLocaleDateString('pt-BR')} 
-                                 {item.usuario_cadastro && (
-                                   <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold break-words border border-slate-200">
-                                     Criado por: {item.usuario_cadastro}
-                                   </span>
-                                 )}
+                               <p className="flex items-center justify-end gap-1 flex-wrap">➕ {new Date(item.created_at).toLocaleDateString('pt-BR')} 
+                                 {item.usuario_cadastro && (<span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold break-words border border-slate-200">Criado por: {item.usuario_cadastro}</span>)}
                                </p>
                              )}
-                             
                              {item.updated_at && (
-                               <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1 flex-wrap mt-1">
-                                 ✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}
-                                 {item.usuario_alteracao && item.usuario_alteracao !== item.usuario_cadastro && (
-                                   <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold break-words border border-amber-200">
-                                     Editado por: {item.usuario_alteracao}
-                                   </span>
-                                 )}
+                               <p className="text-amber-600 font-bold italic flex items-center justify-end gap-1 flex-wrap mt-1">✏️ Edt: {new Date(item.updated_at).toLocaleDateString('pt-BR')}
+                                 {item.usuario_alteracao && item.usuario_alteracao !== item.usuario_cadastro && (<span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold break-words border border-amber-200">Editado por: {item.usuario_alteracao}</span>)}
                                </p>
                              )}
                            </div>
-
                         </div>
-                        
                         {isAdmin && (
                           <div className="flex gap-2 mt-4 w-full sm:w-auto">
                             <button onClick={() => alternarPagamento(item.id, item.pago)} className={`flex-1 sm:flex-none px-3 py-3 sm:py-2.5 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm break-words ${item.pago ? 'bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>{item.pago ? 'DESMARCAR' : 'MARCAR PAGO'}</button>
@@ -1499,14 +1212,9 @@ export default function DiariasDashboard() {
                 </div>
               ))
             )}
-
-            {/* --- BOTAO CARREGAR MAIS --- */}
             {limiteVisivel < diariasFiltradas.length && (
               <div className="flex justify-center mt-6 mb-8">
-                <button 
-                  onClick={() => setLimiteVisivel(prev => prev + 50)} 
-                  className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 font-black py-4 sm:py-3 px-8 rounded-2xl sm:rounded-xl text-[10px] sm:text-xs uppercase tracking-widest transition-colors shadow-sm active:scale-95 break-words"
-                >
+                <button onClick={() => setLimiteVisivel(prev => prev + 50)} className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 font-black py-4 sm:py-3 px-8 rounded-2xl sm:rounded-xl text-[10px] sm:text-xs uppercase tracking-widest transition-colors shadow-sm active:scale-95 break-words">
                   🔄 Mostrar mais antigas... ({diariasFiltradas.length - limiteVisivel} ocultas)
                 </button>
               </div>
@@ -1543,8 +1251,6 @@ export default function DiariasDashboard() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* Novas animações para a tela de loading */
         @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
         .animate-fadeIn { animation: fadeIn 0.2s ease forwards; }
       `}</style>
